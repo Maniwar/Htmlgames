@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dungeon Crawler - Fixed Quick Access Bar</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+        }
+        #gameContainer {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #gameCanvas {
+            border: 1px solid #000;
+            display: block;
+        }
+        #controls {
+            display: flex;
+            justify-content: space-between;
+            width: 400px;
+            margin-top: 20px;
+        }
+        .dpad {
+            width: 120px;
+            height: 120px;
+            position: relative;
+        }
+        .dpad button {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            background: #ccc;
+            border: none;
+            border-radius: 50%;
+            font-size: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+        }
+        .up { top: 0; left: 40px; }
+        .left { top: 40px; left: 0; }
+        .right { top: 40px; left: 80px; }
+        .down { bottom: 0; left: 40px; }
+        #info {
+            text-align: center;
+            margin-bottom: 10px;
+            font-family: Arial, sans-serif;
+        }
+        #inventory {
+            border: 1px solid gray;
+            padding: 10px;
+            display: none;
+            margin-top: 10px;
+        }
+        #inventoryList {
+            list-style-type: none;
+            padding: 0;
+        }
+        #inventoryList li {
+            margin: 5px 0;
+            cursor: move;
+        }
+        #inventoryList li button {
+            margin-left: 10px;
+        }
+        #quickAccessBar {
+            display: flex;
+            justify-content: center;
+            margin-top: 10px;
+        }
+        .quickSlot {
+            width: 50px;
+            height: 50px;
+            border: 2px solid #ccc;
+            margin: 0 5px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-color: #eee;
+            cursor: pointer;
+        }
+        .quickSlot:hover {
+            background-color: #ddd;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="info">
+            <span id="stage">Stage: 1</span> | 
+            <span id="health">Health: 100/100</span> | 
+            <span id="level">Level: 1</span> | 
+            <span id="xp">XP: 0/100</span>
+        </div>
+        <canvas id="gameCanvas" width="400" height="400"></canvas>
+        <div id="controls">
+            <div id="movementDpad" class="dpad">
+                <button class="up" id="moveUp">⬆️</button>
+                <button class="left" id="moveLeft">⬅️</button>
+                <button class="right" id="moveRight">➡️</button>
+                <button class="down" id="moveDown">⬇️</button>
+            </div>
+            <div id="firingDpad" class="dpad">
+                <button class="up" id="fireUp">🔥⬆️</button>
+                <button class="left" id="fireLeft">🔥⬅️</button>
+                <button class="right" id="fireRight">🔥➡️</button>
+                <button class="down" id="fireDown">🔥⬇️</button>
+            </div>
+        </div>
+        <button id="toggleInventory">Inventory</button>
+        <div id="inventory">
+            <h3>Equipped:</h3>
+            <p id="equippedWeapon">Weapon: None</p>
+            <p id="equippedArmor">Armor: None</p>
+            <h3>Inventory:</h3>
+            <ul id="inventoryList"></ul>
+        </div>
+        <div id="quickAccessBar">
+            <div class="quickSlot" data-slot="0"></div>
+            <div class="quickSlot" data-slot="1"></div>
+            <div class="quickSlot" data-slot="2"></div>
+            <div class="quickSlot" data-slot="3"></div>
+            <div class="quickSlot" data-slot="4"></div>
+        </div>
+    </div>
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const cellSize = 40;
+        const mapSize = 10;
+        const directions = {
+            up: { dx: 0, dy: -1 },
+            left: { dx: -1, dy: 0 },
+            right: { dx: 1, dy: 0 },
+            down: { dx: 0, dy: 1 }
+        };
+
+        let stage = 1;
+        let player = {
+            x: 1, y: 1, health: 100, maxHealth: 100, attack: 10, level: 1, xp: 0, xpToNext: 100,
+            moveCooldown: 0, fireCooldown: 0, speedBoostTimer: 0, megaDamageTimer: 0, shieldTimer: 0,
+            teleportTimer: 0, timeFreezeTimer: 0, invisibilityTimer: 0, doubleArrowTimer: 0,
+            healthRegenTimer: 0, explosiveArrowsTimer: 0, trail: [],
+            equippedWeapon: null, equippedArmor: null, inventory: [],
+            quickAccess: [null, null, null, null, null]
+        };
+        let currentMap = generateMap();
+        let enemies = generateEnemies(stage);
+        let loot = generateLoot();
+        let arrows = [];
+        let popups = [];
+        let movingUp = false, movingLeft = false, movingRight = false, movingDown = false;
+        let exitUnlocked = false;
+        let lastTimestamp = 0;
+
+        // Rare Loot Definitions
+        const rareWeapons = [
+            { type: 'weapon', name: 'Bow', attack: 15, fireRate: 0.5, symbol: '🏹' },
+            { type: 'weapon', name: 'Crossbow', attack: 20, fireRate: 0.3, symbol: '🏹' },
+            { type: 'weapon', name: 'Shotgun', attack: 10, fireRate: 0.7, symbol: '🔫', spread: true }
+        ];
+        const rareArmor = [
+            { type: 'armor', name: 'Leather Armor', defense: 5, symbol: '🛡️' },
+            { type: 'armor', name: 'Chainmail', defense: 10, symbol: '🛡️' }
+        ];
+        const rarePotions = [
+            { type: 'potion', name: 'Health Potion', effect: { health: 50 }, symbol: '🧪' }
+        ];
+
+        // Procedural Map Generation
+        function generateMap() {
+            let map = Array(mapSize).fill().map(() => Array(mapSize).fill(0));
+            for (let y = 0; y < mapSize; y++) {
+                for (let x = 0; x < mapSize; x++) {
+                    map[y][x] = Math.random() < 0.4 ? 1 : 0;
+                }
+            }
+            for (let i = 0; i < 3; i++) {
+                map = cellularAutomataStep(map);
+            }
+            map[1][1] = 0; // Start
+            map[8][8] = 0; // Exit
+            if (!isConnected(map)) return generateMap();
+            return map;
+        }
+
+        function cellularAutomataStep(map) {
+            const newMap = map.map(row => row.slice());
+            for (let y = 0; y < mapSize; y++) {
+                for (let x = 0; x < mapSize; x++) {
+                    const wallNeighbors = countWallNeighbors(map, x, y);
+                    newMap[y][x] = wallNeighbors >= 5 ? 1 : 0;
+                }
+            }
+            return newMap;
+        }
+
+        function countWallNeighbors(map, x, y) {
+            let count = 0;
+            for (let dy = -1; dy <= 1; dy++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    if (dx === 0 && dy === 0) continue;
+                    const nx = x + dx;
+                    const ny = y + dy;
+                    if (nx < 0 || nx >= mapSize || ny < 0 || ny >= mapSize || map[ny][nx] === 1) count++;
+                }
+            }
+            return count;
+        }
+
+        function isConnected(map) {
+            const visited = Array(mapSize).fill().map(() => Array(mapSize).fill(false));
+            const queue = [[1, 1]];
+            visited[1][1] = true;
+            while (queue.length) {
+                const [x, y] = queue.shift();
+                for (const dir of Object.values(directions)) {
+                    const nx = x + dir.dx;
+                    const ny = y + dir.dy;
+                    if (nx >= 0 && nx < mapSize && ny >= 0 && ny < mapSize && !visited[ny][nx] && map[ny][nx] === 0) {
+                        visited[ny][nx] = true;
+                        queue.push([nx, ny]);
+                    }
+                }
+            }
+            return visited[8][8];
+        }
+
+        // Enemy and Loot Generation
+        function generateEnemies(stage) {
+            const baseHealth = 50 + (stage - 1) * 10;
+            const baseAttack = 5 + Math.floor((stage - 1) / 2);
+            const enemyTypes = [
+                { type: 'grunt', maxHealth: baseHealth, health: baseHealth, attack: baseAttack, fireChance: 0.05, moveSpeed: 0.5, symbol: '👾' },
+                { type: 'sniper', maxHealth: baseHealth - 10, health: baseHealth - 10, attack: baseAttack + 2, fireChance: 0.1, moveSpeed: 0.7, symbol: '🧟' },
+                { type: 'tank', maxHealth: baseHealth + 20, health: baseHealth + 20, attack: baseAttack + 3, fireChance: 0, moveSpeed: 1, symbol: '👹' }
+            ];
+            const enemyList = [];
+            for (let i = 0; i < 3; i++) {
+                const type = enemyTypes[Math.floor(Math.random() * 3)];
+                let x, y;
+                do {
+                    x = Math.floor(Math.random() * mapSize);
+                    y = Math.floor(Math.random() * mapSize);
+                } while (currentMap[y][x] !== 0 || (x === 1 && y === 1) || (x === 8 && y === 8));
+                enemyList.push({
+                    x, y, health: type.health, maxHealth: type.maxHealth, attack: type.attack, moveCooldown: 0, fireCooldown: 0,
+                    type: type.type, fireChance: type.fireChance, moveSpeed: type.moveSpeed, symbol: type.symbol,
+                    speedBoostTimer: 0, megaDamageTimer: 0, shieldTimer: 0
+                });
+            }
+            return enemyList;
+        }
+
+        function generateLoot() {
+            const lootTypes = [
+                { type: 'speed', name: 'Speed Boost', symbol: '🏃', effect: (target) => target.speedBoostTimer = 10 },
+                { type: 'damage', name: 'Mega Damage', symbol: '💪', effect: (target) => target.megaDamageTimer = 10 },
+                { type: 'shield', name: 'Shield', symbol: '🛡️', effect: (target) => target.shieldTimer = 5 },
+                { type: 'teleport', name: 'Teleport', symbol: '🔮', effect: (target) => teleportTarget(target) },
+                { type: 'timeFreeze', name: 'Time Freeze', symbol: '⏳', effect: (target) => target.timeFreezeTimer = 5 },
+                { type: 'invisibility', name: 'Invisibility', symbol: '👻', effect: (target) => target.invisibilityTimer = 10 },
+                { type: 'doubleArrow', name: 'Double Arrow', symbol: '🏹', effect: (target) => target.doubleArrowTimer = 10 },
+                { type: 'healthRegen', name: 'Health Regen', symbol: '💖', effect: (target) => target.healthRegenTimer = 10 },
+                { type: 'explosiveArrows', name: 'Explosive Arrows', symbol: '💣', effect: (target) => target.explosiveArrowsTimer = 10 }
+            ];
+            const lootList = [];
+            for (let i = 0; i < 3; i++) {
+                const type = lootTypes[i];
+                let x, y;
+                do {
+                    x = Math.floor(Math.random() * mapSize);
+                    y = Math.floor(Math.random() * mapSize);
+                } while (currentMap[y][x] !== 0 || (x === 1 && y === 1) || (x === 8 && y === 8) || lootList.some(l => l.x === x && l.y === y));
+                lootList.push({ x, y, ...type });
+            }
+            return lootList;
+        }
+
+        function teleportTarget(target) {
+            let x, y;
+            do {
+                x = Math.floor(Math.random() * mapSize);
+                y = Math.floor(Math.random() * mapSize);
+            } while (currentMap[y][x] !== 0);
+            target.x = x;
+            target.y = y;
+        }
+
+        // Drawing Functions
+        function drawMap() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.font = "30px Arial";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            for (let y = 0; y < mapSize; y++) {
+                for (let x = 0; x < mapSize; x++) {
+                    ctx.fillText(
+                        (x === 8 && y === 8 && exitUnlocked) ? "🚪" : (currentMap[y][x] === 1 ? "🧱" : "⬜"),
+                        x * cellSize + cellSize / 2,
+                        y * cellSize + cellSize / 2
+                    );
+                }
+            }
+            loot.forEach(item => ctx.fillText(item.symbol, item.x * cellSize + cellSize / 2, item.y * cellSize + cellSize / 2));
+            enemies.forEach(enemy => {
+                ctx.fillText(enemy.symbol, enemy.x * cellSize + cellSize / 2, enemy.y * cellSize + cellSize / 2);
+                const healthBarWidth = 30;
+                const healthBarHeight = 5;
+                const healthRatio = enemy.health / enemy.maxHealth;
+                ctx.fillStyle = 'red';
+                ctx.fillRect(enemy.x * cellSize + (cellSize - healthBarWidth) / 2, enemy.y * cellSize - 10, healthBarWidth, healthBarHeight);
+                ctx.fillStyle = 'green';
+                ctx.fillRect(enemy.x * cellSize + (cellSize - healthBarWidth) / 2, enemy.y * cellSize - 10, healthBarWidth * healthRatio, healthBarHeight);
+            });
+            ctx.fillText("🧍", player.x * cellSize + cellSize / 2, player.y * cellSize + cellSize / 2);
+            const healthBarWidth = 30;
+            const healthBarHeight = 5;
+            const healthRatio = player.health / player.maxHealth;
+            ctx.fillStyle = 'red';
+            ctx.fillRect(player.x * cellSize + (cellSize - healthBarWidth) / 2, player.y * cellSize - 10, healthBarWidth, healthBarHeight);
+            ctx.fillStyle = 'green';
+            ctx.fillRect(player.x * cellSize + (cellSize - healthBarWidth) / 2, player.y * cellSize - 10, healthBarWidth * healthRatio, healthBarHeight);
+
+            if (player.shieldTimer > 0) {
+                ctx.strokeStyle = 'blue';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(player.x * cellSize + cellSize / 2, player.y * cellSize + cellSize / 2, 20, 0, 2 * Math.PI);
+                ctx.stroke();
+            }
+            if (player.speedBoostTimer > 0) {
+                player.trail.forEach((pos, i) => {
+                    ctx.globalAlpha = 0.1 * (3 - i);
+                    ctx.fillText("🧍", pos.x * cellSize + cellSize / 2, pos.y * cellSize + cellSize / 2);
+                });
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        function drawArrows() {
+            arrows.forEach(arrow => {
+                ctx.strokeStyle = arrow.isPlayer ? (player.megaDamageTimer > 0 ? 'purple' : 'blue') : 'red';
+                ctx.lineWidth = player.megaDamageTimer > 0 ? 4 : 2;
+                ctx.beginPath();
+                ctx.moveTo(arrow.x * cellSize, arrow.y * cellSize);
+                ctx.lineTo((arrow.x + arrow.dx * 0.5) * cellSize, (arrow.y + arrow.dy * 0.5) * cellSize);
+                ctx.stroke();
+            });
+        }
+
+        function drawPopups() {
+            popups.forEach(popup => {
+                ctx.globalAlpha = popup.timeToLive / 1;
+                ctx.fillStyle = 'yellow';
+                ctx.font = '16px Arial';
+                ctx.fillText(popup.text, popup.x * cellSize + cellSize / 2, popup.y * cellSize + cellSize / 2);
+                ctx.globalAlpha = 1;
+            });
+        }
+
+        // Game Logic
+        function movePlayer(dx, dy) {
+            const newX = player.x + dx;
+            const newY = player.y + dy;
+            if (newX >= 0 && newX < mapSize && newY >= 0 && newY < mapSize && currentMap[newY][newX] === 0) {
+                if (player.speedBoostTimer > 0) {
+                    player.trail.push({ x: player.x, y: player.y });
+                    if (player.trail.length > 3) player.trail.shift();
+                }
+                player.x = newX;
+                player.y = newY;
+                const lootIndex = loot.findIndex(item => item.x === player.x && item.y === player.y);
+                if (lootIndex >= 0) {
+                    const item = loot[lootIndex];
+                    if (item.type === 'potion' || item.effect) {
+                        const quickSlotIndex = player.quickAccess.findIndex(slot => slot === null);
+                        if (quickSlotIndex !== -1) {
+                            player.quickAccess[quickSlotIndex] = item;
+                        } else {
+                            player.inventory.push(item);
+                        }
+                    } else {
+                        player.inventory.push(item);
+                    }
+                    loot.splice(lootIndex, 1);
+                    updateQuickAccessDisplay();
+                    updateInventoryDisplay();
+                }
+                if (exitUnlocked && player.x === 8 && player.y === 8) advanceStage();
+            }
+        }
+
+        function fireArrow(x, y, dx, dy, isPlayer = true) {
+            const weapon = player.equippedWeapon || { attack: 10, fireRate: 0.5, spread: false };
+            const damage = isPlayer ? (player.megaDamageTimer > 0 ? weapon.attack * 2 : weapon.attack) : 5;
+            if (weapon.spread) {
+                arrows.push({ x: x + 0.5, y: y + 0.5, dx: dx + 0.1, dy, isPlayer, damage });
+                arrows.push({ x: x + 0.5, y: y + 0.5, dx: dx - 0.1, dy, isPlayer, damage });
+            }
+            arrows.push({ x: x + 0.5, y: y + 0.5, dx, dy, isPlayer, damage });
+            if (player.doubleArrowTimer > 0) {
+                arrows.push({ x: x + 0.5 + (dx * 0.1), y: y + 0.5 + (dy * 0.1), dx, dy, isPlayer, damage });
+            }
+        }
+
+        function updateGameState(deltaTime) {
+            player.moveCooldown -= deltaTime;
+            player.fireCooldown -= deltaTime;
+            player.speedBoostTimer -= deltaTime;
+            player.megaDamageTimer -= deltaTime;
+            player.shieldTimer -= deltaTime;
+            player.teleportTimer -= deltaTime;
+            player.timeFreezeTimer -= deltaTime;
+            player.invisibilityTimer -= deltaTime;
+            player.doubleArrowTimer -= deltaTime;
+            player.healthRegenTimer -= deltaTime;
+            player.explosiveArrowsTimer -= deltaTime;
+            if (player.moveCooldown < 0) player.moveCooldown = 0;
+            if (player.fireCooldown < 0) player.fireCooldown = 0;
+            if (player.speedBoostTimer < 0) player.speedBoostTimer = 0;
+            if (player.megaDamageTimer < 0) player.megaDamageTimer = 0;
+            if (player.shieldTimer < 0) player.shieldTimer = 0;
+            if (player.teleportTimer < 0) player.teleportTimer = 0;
+            if (player.timeFreezeTimer < 0) player.timeFreezeTimer = 0;
+            if (player.invisibilityTimer < 0) player.invisibilityTimer = 0;
+            if (player.doubleArrowTimer < 0) player.doubleArrowTimer = 0;
+            if (player.healthRegenTimer < 0) player.healthRegenTimer = 0;
+            if (player.explosiveArrowsTimer < 0) player.explosiveArrowsTimer = 0;
+
+            if (player.healthRegenTimer > 0) {
+                player.health = Math.min(player.maxHealth, player.health + 1);
+                updateInfo();
+            }
+
+            const moveCooldown = player.speedBoostTimer > 0 ? 0.05 : 0.1;
+            if (player.moveCooldown <= 0 && (movingUp || movingLeft || movingRight || movingDown)) {
+                if (movingUp) movePlayer(0, -1);
+                else if (movingDown) movePlayer(0, 1);
+                else if (movingLeft) movePlayer(-1, 0);
+                else if (movingRight) movePlayer(1, 0);
+                player.moveCooldown = moveCooldown;
+            }
+
+            if (player.timeFreezeTimer <= 0) {
+                enemies.forEach(enemy => {
+                    enemy.moveCooldown -= deltaTime;
+                    enemy.fireCooldown -= deltaTime;
+                    if (enemy.moveCooldown < 0) enemy.moveCooldown = 0;
+                    if (enemy.fireCooldown < 0) enemy.fireCooldown = 0;
+
+                    if (enemy.fireCooldown <= 0 && enemy.fireChance > 0 && Math.random() < enemy.fireChance && isInLineOfSight(enemy) && player.invisibilityTimer <= 0) {
+                        const direction = getDirectionToPlayer(enemy);
+                        if (direction) {
+                            fireArrow(enemy.x, enemy.y, direction.dx, direction.dy, false);
+                            enemy.fireCooldown = 1;
+                        }
+                    }
+                    if (enemy.moveCooldown <= 0) {
+                        const target = getClosestTarget(enemy);
+                        const dir = getDirectionToTarget(enemy, target);
+                        const newX = enemy.x + dir.dx;
+                        const newY = enemy.y + dir.dy;
+                        if (newX >= 0 && newX < mapSize && newY >= 0 && newY < mapSize && currentMap[newY][newX] === 0) {
+                            enemy.x = newX;
+                            enemy.y = newY;
+                            const lootIndex = loot.findIndex(item => item.x === enemy.x && item.y === enemy.y);
+                            if (lootIndex >= 0) {
+                                loot[lootIndex].effect(enemy);
+                                loot.splice(lootIndex, 1);
+                            }
+                        }
+                        enemy.moveCooldown = enemy.moveSpeed;
+                    }
+                });
+            }
+
+            for (let i = arrows.length - 1; i >= 0; i--) {
+                const arrow = arrows[i];
+                arrow.x += arrow.dx * 5 * deltaTime;
+                arrow.y += arrow.dy * 5 * deltaTime;
+                const cellX = Math.floor(arrow.x);
+                const cellY = Math.floor(arrow.y);
+
+                if (cellX < 0 || cellX >= mapSize || cellY < 0 || cellY >= mapSize || currentMap[cellY][cellX] === 1) {
+                    if (arrow.isPlayer && player.explosiveArrowsTimer > 0) addExplosion(cellX, cellY, true);
+                    arrows.splice(i, 1);
+                } else if (arrow.isPlayer) {
+                    for (let j = 0; j < enemies.length; j++) {
+                        const enemy = enemies[j];
+                        if (enemy.x === cellX && enemy.y === cellY) {
+                            if (enemy.shieldTimer <= 0) {
+                                enemy.health -= arrow.damage;
+                                applyKnockback(enemy, -arrow.dx, -arrow.dy);
+                                addDamagePopup(enemy.x, enemy.y, arrow.damage);
+                            }
+                            if (player.explosiveArrowsTimer > 0) addExplosion(cellX, cellY, true);
+                            if (enemy.health <= 0) {
+                                if (Math.random() < 0.1) {
+                                    const rareLootTypes = [rareWeapons, rareArmor, rarePotions];
+                                    const type = rareLootTypes[Math.floor(Math.random() * rareLootTypes.length)];
+                                    const item = type[Math.floor(Math.random() * type.length)];
+                                    loot.push({ x: enemy.x, y: enemy.y, ...item });
+                                }
+                                enemies.splice(j, 1);
+                                j--;
+                                if (!enemies.length) exitUnlocked = true;
+                            }
+                            arrows.splice(i, 1);
+                            updateInfo();
+                            break;
+                        }
+                    }
+                } else if (cellX === player.x && cellY === player.y) {
+                    if (player.shieldTimer <= 0) {
+                        const damage = arrow.damage - (player.equippedArmor ? player.equippedArmor.defense : 0);
+                        player.health -= Math.max(damage, 0);
+                        applyKnockback(player, -arrow.dx, -arrow.dy);
+                        addDamagePopup(player.x, player.y, Math.max(damage, 0));
+                    }
+                    addExplosion(cellX, cellY, false);
+                    if (player.health <= 0) gameOver();
+                    arrows.splice(i, 1);
+                    updateInfo();
+                }
+            }
+
+            for (let i = popups.length - 1; i >= 0; i--) {
+                popups[i].timeToLive -= deltaTime;
+                if (popups[i].timeToLive <= 0) popups.splice(i, 1);
+            }
+        }
+
+        function renderScene() {
+            drawMap();
+            drawArrows();
+            drawPopups();
+        }
+
+        function gameLoop(timestamp) {
+            const deltaTime = (timestamp - lastTimestamp) / 1000;
+            lastTimestamp = timestamp;
+            updateGameState(deltaTime);
+            renderScene();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Helper Functions
+        function addDamagePopup(x, y, damage) {
+            popups.push({ text: `-${damage}`, x, y, timeToLive: 1, isDamage: true });
+        }
+
+        function addExplosion(x, y, isPlayer) {
+            popups.push({ text: '💥', x, y, timeToLive: 0.5, isDamage: false });
+        }
+
+        function gameOver() {
+            player.health = Math.floor(player.maxHealth / 2);
+            player.x = 1;
+            player.y = 1;
+            alert("You died! Respawned with half health.");
+            updateInfo();
+        }
+
+        function advanceStage() {
+            stage++;
+            player.x = 1;
+            player.y = 1;
+            currentMap = generateMap();
+            enemies = generateEnemies(stage);
+            loot = generateLoot();
+            exitUnlocked = false;
+            updateInfo();
+            alert(`Welcome to Stage ${stage}!`);
+        }
+
+        function updateInfo() {
+            document.getElementById('stage').innerText = `Stage: ${stage}`;
+            document.getElementById('health').innerText = `Health: ${player.health}/${player.maxHealth}`;
+            document.getElementById('level').innerText = `Level: ${player.level}`;
+            document.getElementById('xp').innerText = `XP: ${player.xp}/${player.xpToNext}`;
+        }
+
+        function isInLineOfSight(enemy) {
+            const dx = Math.abs(enemy.x - player.x);
+            const dy = Math.abs(enemy.y - player.y);
+            if (dx === 0) {
+                const y1 = Math.min(enemy.y, player.y);
+                const y2 = Math.max(enemy.y, player.y);
+                for (let y = y1 + 1; y < y2; y++) if (currentMap[y][enemy.x] === 1) return false;
+                return true;
+            } else if (dy === 0) {
+                const x1 = Math.min(enemy.x, player.x);
+                const x2 = Math.max(enemy.x, player.x);
+                for (let x = x1 + 1; x < x2; x++) if (currentMap[enemy.y][x] === 1) return false;
+                return true;
+            }
+            return false;
+        }
+
+        function getDirectionToPlayer(enemy) {
+            if (enemy.x === player.x) return enemy.y < player.y ? directions.down : directions.up;
+            if (enemy.y === player.y) return enemy.x < player.x ? directions.right : directions.left;
+            return null;
+        }
+
+        function getClosestTarget(enemy) {
+            return player;
+        }
+
+        function getDirectionToTarget(enemy, target) {
+            const dx = target.x - enemy.x;
+            const dy = target.y - enemy.y;
+            if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? directions.right : directions.left;
+            return dy > 0 ? directions.down : directions.up;
+        }
+
+        function applyKnockback(target, dx, dy) {
+            const newX = target.x + Math.round(dx);
+            const newY = target.y + Math.round(dy);
+            if (newX >= 0 && newX < mapSize && newY >= 0 && newY < mapSize && currentMap[newY][newX] === 0) {
+                target.x = newX;
+                target.y = newY;
+            }
+        }
+
+        // Inventory Management
+        function updateInventoryDisplay() {
+            document.getElementById('equippedWeapon').textContent = `Weapon: ${player.equippedWeapon ? player.equippedWeapon.name : 'None'}`;
+            document.getElementById('equippedArmor').textContent = `Armor: ${player.equippedArmor ? player.equippedArmor.name : 'None'}`;
+            const list = document.getElementById('inventoryList');
+            list.innerHTML = '';
+            player.inventory.forEach((item, index) => {
+                const li = document.createElement('li');
+                li.textContent = item.name || item.type;
+                li.draggable = true;
+                li.setAttribute('data-index', index);
+                li.addEventListener('dragstart', (e) => {
+                    e.dataTransfer.setData('text/plain', index);
+                });
+                const useButton = document.createElement('button');
+                useButton.textContent = 'Use';
+                useButton.addEventListener('click', () => useItem(index));
+                li.appendChild(useButton);
+                list.appendChild(li);
+            });
+        }
+
+        function useItem(index) {
+            const item = player.inventory[index];
+            if (item.type === 'weapon') {
+                if (player.equippedWeapon) player.inventory.push(player.equippedWeapon);
+                player.equippedWeapon = item;
+                player.inventory.splice(index, 1);
+            } else if (item.type === 'armor') {
+                if (player.equippedArmor) player.inventory.push(player.equippedArmor);
+                player.equippedArmor = item;
+                player.inventory.splice(index, 1);
+            } else if (item.type === 'potion') {
+                player.health = Math.min(player.maxHealth, player.health + item.effect.health);
+                player.inventory.splice(index, 1);
+                updateInfo();
+            } else if (item.effect) {
+                item.effect(player);
+                player.inventory.splice(index, 1);
+            }
+            updateInventoryDisplay();
+        }
+
+        // Quick Access Bar Logic
+        const quickSlots = document.querySelectorAll('.quickSlot');
+        quickSlots.forEach((slot) => {
+            slot.addEventListener('click', () => {
+                const slotIndex = parseInt(slot.getAttribute('data-slot'), 10);
+                const item = player.quickAccess[slotIndex];
+                if (item) {
+                    if (item.type === 'potion') {
+                        player.health = Math.min(player.maxHealth, player.health + item.effect.health);
+                        player.quickAccess[slotIndex] = null;
+                        updateInfo();
+                    } else if (item.effect) {
+                        item.effect(player);
+                        player.quickAccess[slotIndex] = null;
+                    }
+                    updateQuickAccessDisplay();
+                }
+            });
+            slot.addEventListener('dragover', (e) => {
+                e.preventDefault();
+            });
+            slot.addEventListener('drop', (e) => {
+                e.preventDefault();
+                const index = e.dataTransfer.getData('text/plain');
+                const item = player.inventory[index];
+                if (item && (item.type === 'potion' || item.effect)) {
+                    const slotIndex = parseInt(slot.getAttribute('data-slot'), 10);
+                    player.quickAccess[slotIndex] = item;
+                    player.inventory.splice(index, 1);
+                    updateInventoryDisplay();
+                    updateQuickAccessDisplay();
+                }
+            });
+        });
+
+        function updateQuickAccessDisplay() {
+            quickSlots.forEach(slot => {
+                const slotIndex = parseInt(slot.getAttribute('data-slot'), 10);
+                const item = player.quickAccess[slotIndex];
+                slot.innerHTML = item ? item.symbol : '';
+            });
+        }
+
+        // Event Listeners for Movement and Firing
+        document.getElementById('moveUp').addEventListener('pointerdown', () => movingUp = true);
+        document.getElementById('moveUp').addEventListener('pointerup', () => movingUp = false);
+        document.getElementById('moveLeft').addEventListener('pointerdown', () => movingLeft = true);
+        document.getElementById('moveLeft').addEventListener('pointerup', () => movingLeft = false);
+        document.getElementById('moveRight').addEventListener('pointerdown', () => movingRight = true);
+        document.getElementById('moveRight').addEventListener('pointerup', () => movingRight = false);
+        document.getElementById('moveDown').addEventListener('pointerdown', () => movingDown = true);
+        document.getElementById('moveDown').addEventListener('pointerup', () => movingDown = false);
+
+        document.addEventListener('pointerup', () => {
+            movingUp = movingLeft = movingRight = movingDown = false;
+        });
+
+        document.getElementById('fireUp').addEventListener('click', () => {
+            if (player.fireCooldown <= 0) {
+                fireArrow(player.x, player.y, 0, -1);
+                player.fireCooldown = player.equippedWeapon ? player.equippedWeapon.fireRate : 0.5;
+            }
+        });
+        document.getElementById('fireLeft').addEventListener('click', () => {
+            if (player.fireCooldown <= 0) {
+                fireArrow(player.x, player.y, -1, 0);
+                player.fireCooldown = player.equippedWeapon ? player.equippedWeapon.fireRate : 0.5;
+            }
+        });
+        document.getElementById('fireRight').addEventListener('click', () => {
+            if (player.fireCooldown <= 0) {
+                fireArrow(player.x, player.y, 1, 0);
+                player.fireCooldown = player.equippedWeapon ? player.equippedWeapon.fireRate : 0.5;
+            }
+        });
+        document.getElementById('fireDown').addEventListener('click', () => {
+            if (player.fireCooldown <= 0) {
+                fireArrow(player.x, player.y, 0, 1);
+                player.fireCooldown = player.equippedWeapon ? player.equippedWeapon.fireRate : 0.5;
+            }
+        });
+
+        document.getElementById('toggleInventory').addEventListener('click', () => {
+            const inventoryDiv = document.getElementById('inventory');
+            inventoryDiv.style.display = inventoryDiv.style.display === 'none' ? 'block' : 'none';
+            updateInventoryDisplay();
+        });
+
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>
