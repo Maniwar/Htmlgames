@@ -104,11 +104,20 @@
             align-items: center;
             background-color: #eee;
             cursor: pointer;
-            transition: transform 0.2s;
+            transition: transform 0.2s, border-color 0.2s;
         }
         .quickSlot:hover, .spellSlot:hover {
             background-color: #ddd;
             transform: scale(1.1);
+        }
+        .spellSlot {
+            background-color: #d1e7ff; /* Light blue for spells */
+        }
+        .spellSlot:hover {
+            background-color: #b3d4ff;
+        }
+        .quickSlot.drag-reject, .spellSlot.drag-reject {
+            border-color: red; /* Feedback for invalid drop */
         }
         .key {
             position: absolute;
@@ -144,7 +153,8 @@
             <span id="stage">Stage: 1</span> | 
             <span id="health">Health: 100/100</span> | 
             <span id="level">Level: 1</span> | 
-            <span id="xp">XP: 0/100</span>
+            <span id="xp">XP: 0/100</span> | 
+            <span id="equippedSpell">Spell: None</span>
         </div>
         <canvas id="gameCanvas" width="400" height="400"></canvas>
         <div id="controls">
@@ -201,6 +211,13 @@
         const POISON_DAMAGE = 2;
         const POISON_INTERVAL = 1;
         const POISON_DURATION = 5;
+        const BURN_DAMAGE = 5;
+        const BURN_INTERVAL = 1;
+        const SLOW_FACTOR = 0.5;
+        const SLOW_DURATION = 3;
+        const STUN_DURATION = 2;
+
+        let hasEquippedSpell = false;
 
         function resizeCanvas() {
             const displaySize = Math.min(window.innerWidth, window.innerHeight) * 0.8;
@@ -260,24 +277,30 @@
             'Arcane Bolt': 'purple',
             'Scatter Spell': 'white',
             'Fireball': 'red',
+            'Ice Shard': 'blue',
+            'Lightning Bolt': 'yellow',
+            'Earthquake': 'brown',
             'Disintegrate': 'green',
             'Arcane Barrage': 'cyan'
         };
 
         const rareSpells = [
-            { type: 'spell', name: 'Magic Missile', attack: 15, fireRate: 0.5, symbol: '✨', spread: false, isAoE: false, poisonChance: 0.1 },
-            { type: 'spell', name: 'Arcane Bolt', attack: 20, fireRate: 0.3, symbol: '💫', spread: false, isAoE: false },
-            { type: 'spell', name: 'Scatter Spell', attack: 10, fireRate: 0.7, symbol: '🌟', spread: true, isAoE: false },
-            { type: 'spell', name: 'Fireball', attack: 25, fireRate: 1.0, symbol: '🔥', spread: false, isAoE: true },
-            { type: 'spell', name: 'Disintegrate', attack: 40, fireRate: 1.5, symbol: '☄️', spread: false, isAoE: false },
-            { type: 'spell', name: 'Arcane Barrage', attack: 5, fireRate: 0.1, symbol: '🌠', spread: false, isAoE: false }
+            { type: 'spell', name: 'Magic Missile', attack: 15, fireRate: 0.5, symbol: '✨', spread: false, isAoE: false, poisonChance: 0.1, description: 'A basic spell that fires a missile of magic energy.' },
+            { type: 'spell', name: 'Arcane Bolt', attack: 20, fireRate: 0.3, symbol: '💫', spread: false, isAoE: false, description: 'A powerful bolt of arcane energy.' },
+            { type: 'spell', name: 'Scatter Spell', attack: 10, fireRate: 0.7, symbol: '🌟', spread: true, isAoE: false, description: 'Fires multiple projectiles in a spread pattern.' },
+            { type: 'spell', name: 'Fireball', attack: 20, fireRate: 1.0, symbol: '🔥', element: 'fire', effect: 'burn', spread: false, isAoE: false, description: 'Launches a fireball that burns enemies.' },
+            { type: 'spell', name: 'Ice Shard', attack: 15, fireRate: 0.8, symbol: '❄️', element: 'ice', effect: 'slow', spread: false, isAoE: false, description: 'Fires a shard of ice that slows enemies.' },
+            { type: 'spell', name: 'Lightning Bolt', attack: 30, fireRate: 1.5, symbol: '⚡', element: 'lightning', effect: 'stun', spread: false, isAoE: false, description: 'Strikes with a bolt of lightning that can stun.' },
+            { type: 'spell', name: 'Earthquake', attack: 25, fireRate: 2.0, symbol: '🌋', element: 'earth', effect: 'aoe', spread: false, isAoE: true, description: 'Causes an earthquake that damages enemies in an area.' },
+            { type: 'spell', name: 'Disintegrate', attack: 40, fireRate: 1.5, symbol: '☄️', spread: false, isAoE: false, description: 'A powerful spell that disintegrates enemies.' },
+            { type: 'spell', name: 'Arcane Barrage', attack: 5, fireRate: 0.1, symbol: '🌠', spread: false, isAoE: false, description: 'Fires a rapid barrage of arcane missiles.' }
         ];
         const rareArmor = [
-            { type: 'armor', name: 'Leather Armor', defense: 5, symbol: '🛡️' },
-            { type: 'armor', name: 'Chainmail', defense: 10, symbol: '🛡️' }
+            { type: 'armor', name: 'Leather Armor', defense: 5, symbol: '🛡️', description: 'Light armor that provides basic protection.' },
+            { type: 'armor', name: 'Chainmail', defense: 10, symbol: '🛡️', description: 'Medium armor that offers better protection.' }
         ];
         const rarePotions = [
-            { type: 'potion', name: 'Health Potion', effect: { health: 50 }, symbol: '🧪' }
+            { type: 'potion', name: 'Health Potion', effect: { health: 50 }, symbol: '🧪', description: 'Restores 50 health points when consumed.' }
         ];
 
         const attackMultipliers = {
@@ -388,11 +411,11 @@
             const baseHealth = 50 + (stage - 1) * 10;
             const baseAttack = 5 + Math.floor((stage - 1) / 2);
             const enemyTypes = [
-                { type: 'grunt', maxHealth: baseHealth, health: baseHealth, attack: baseAttack, fireChance: 0.05, moveSpeed: 0.5, symbol: '👾' },
-                { type: 'sniper', maxHealth: baseHealth - 10, health: baseHealth - 10, attack: baseAttack + 2, fireChance: 0.1, moveSpeed: 0.7, symbol: '🧟' },
-                { type: 'tank', maxHealth: baseHealth + 20, health: baseHealth + 20, attack: baseAttack + 3, fireChance: 0, moveSpeed: 1, symbol: '👹' },
-                { type: 'summoner', maxHealth: baseHealth - 20, health: baseHealth - 20, attack: baseAttack - 2, fireChance: 0, moveSpeed: 1, symbol: '🧙‍♂️', summonCooldown: 5 },
-                { type: 'mage', maxHealth: baseHealth - 30, health: baseHealth - 30, attack: baseAttack, fireChance: 0, moveSpeed: 0.7, symbol: '🧙‍♀️', spellCooldown: 3, spells: ['fireball', 'slow'] }
+                { type: 'grunt', maxHealth: baseHealth, health: baseHealth, attack: baseAttack, fireChance: 0.05, moveSpeed: 0.5, symbol: '👾', resistance: 'fire' },
+                { type: 'sniper', maxHealth: baseHealth - 10, health: baseHealth - 10, attack: baseAttack + 2, fireChance: 0.1, moveSpeed: 0.7, symbol: '🧟', resistance: 'ice' },
+                { type: 'tank', maxHealth: baseHealth + 20, health: baseHealth + 20, attack: baseAttack + 3, fireChance: 0, moveSpeed: 1, symbol: '👹', resistance: 'lightning' },
+                { type: 'summoner', maxHealth: baseHealth - 20, health: baseHealth - 20, attack: baseAttack - 2, fireChance: 0, moveSpeed: 1, symbol: '🧙‍♂️', summonCooldown: 5, resistance: 'earth' },
+                { type: 'mage', maxHealth: baseHealth - 30, health: baseHealth - 30, attack: baseAttack, fireChance: 0, moveSpeed: 0.7, symbol: '🧙‍♀️', spellCooldown: 3, spells: ['fireball', 'slow'], resistance: 'fire' }
             ];
             const enemyList = [];
             const enemyCount = Math.min(3 + Math.floor(stage / 2), 10);
@@ -414,7 +437,12 @@
                     critChance: 0.05,
                     poisonTimer: 0,
                     poisonAccumulator: 0,
-                    poisonParticleTimer: 0
+                    poisonParticleTimer: 0,
+                    resistance: type.resistance,
+                    burnTimer: 0,
+                    burnAccumulator: 0,
+                    slowTimer: 0,
+                    stunTimer: 0
                 };
                 if (type.type === 'summoner') enemy.summonCooldown = type.summonCooldown;
                 if (type.type === 'mage') {
@@ -428,15 +456,15 @@
 
         function generateLoot() {
             const lootTypes = [
-                { type: 'speed', name: 'Speed Boost', symbol: '🏃', effect: (target) => target.speedBoostTimer = 10 },
-                { type: 'damage', name: 'Mega Damage', symbol: '💪', effect: (target) => target.megaDamageTimer = 10 },
-                { type: 'shield', name: 'Shield', symbol: '🛡️', effect: (target) => target.shieldTimer = 5 },
-                { type: 'teleport', name: 'Teleport', symbol: '🔮', effect: (target) => teleportTarget(target) },
-                { type: 'timeFreeze', name: 'Time Freeze', symbol: '⏳', effect: (target) => target.timeFreezeTimer = 5 },
-                { type: 'invisibility', name: 'Invisibility', symbol: '👻', effect: (target) => target.invisibilityTimer = 10 },
-                { type: 'doubleArrow', name: 'Double Arrow', symbol: '🏹', effect: (target) => target.doubleArrowTimer = 10 },
-                { type: 'healthRegen', name: 'Health Regen', symbol: '💖', effect: (target) => target.healthRegenTimer = 10 },
-                { type: 'explosiveArrows', name: 'Explosive Arrows', symbol: '💣', effect: (target) => target.explosiveArrowsTimer = 10 }
+                { type: 'speed', name: 'Speed Boost', symbol: '🏃', effect: (target) => target.speedBoostTimer = 10, description: 'Temporarily increases movement speed.' },
+                { type: 'damage', name: 'Mega Damage', symbol: '💪', effect: (target) => target.megaDamageTimer = 10, description: 'Temporarily increases attack damage.' },
+                { type: 'shield', name: 'Shield', symbol: '🛡️', effect: (target) => target.shieldTimer = 5, description: 'Provides a temporary shield against damage.' },
+                { type: 'teleport', name: 'Teleport', symbol: '🔮', effect: (target) => teleportTarget(target), description: 'Teleports to a random location.' },
+                { type: 'timeFreeze', name: 'Time Freeze', symbol: '⏳', effect: (target) => target.timeFreezeTimer = 5, description: 'Freezes time for a short duration.' },
+                { type: 'invisibility', name: 'Invisibility', symbol: '👻', effect: (target) => target.invisibilityTimer = 10, description: 'Makes you invisible to enemies.' },
+                { type: 'doubleArrow', name: 'Double Arrow', symbol: '🏹', effect: (target) => target.doubleArrowTimer = 10, description: 'Fires two arrows instead of one.' },
+                { type: 'healthRegen', name: 'Health Regen', symbol: '💖', effect: (target) => target.healthRegenTimer = 10, description: 'Regenerates health over time.' },
+                { type: 'explosiveArrows', name: 'Explosive Arrows', symbol: '💣', effect: (target) => target.explosiveArrowsTimer = 10, description: 'Arrows explode on impact.' }
             ];
             const lootList = [];
             for (let i = 0; i < 3; i++) {
@@ -680,6 +708,16 @@
                 ctx.arc(arrow.x * cellSize, arrow.y * cellSize, 2 * size, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.globalAlpha = 1;
+
+                if (arrow.element === 'fire') {
+                    createParticles(arrow.x, arrow.y, 1, 'red', 0.5, 0.1);
+                } else if (arrow.element === 'ice') {
+                    createParticles(arrow.x, arrow.y, 1, 'blue', 0.5, 0.1);
+                } else if (arrow.element === 'lightning') {
+                    createParticles(arrow.x, arrow.y, 1, 'yellow', 1, 0.05);
+                } else if (arrow.element === 'earth') {
+                    createParticles(arrow.x, arrow.y, 1, 'brown', 0.5, 0.1);
+                }
             });
         }
 
@@ -711,7 +749,7 @@
                 const lootIndex = loot.findIndex(item => item.x === player.x && item.y === player.y);
                 if (lootIndex >= 0) {
                     const item = loot[lootIndex];
-                    if (item.type === 'potion' || item.effect) {
+                    if (item.type === 'potion' || typeof item.effect === 'function') {
                         const quickSlotIndex = player.quickAccess.findIndex(slot => slot === null);
                         if (quickSlotIndex !== -1) {
                             player.quickAccess[quickSlotIndex] = item;
@@ -756,7 +794,10 @@
                 isAoE: isPlayer && (player.equippedSpell ? player.equippedSpell.isAoE : false) || (player.explosiveArrowsTimer > 0),
                 isPoison: isPlayer && player.equippedSpell && player.equippedSpell.poisonChance && Math.random() < player.equippedSpell.poisonChance,
                 chargeColor: chargeColor,
-                color: isPlayer ? (player.equippedSpell ? spellColors[player.equippedSpell.name] : 'blue') : 'red'
+                color: isPlayer ? (player.equippedSpell ? spellColors[player.equippedSpell.name] : 'blue') : 'red',
+                element: isPlayer && player.equippedSpell ? player.equippedSpell.element : null,
+                effect: isPlayer && player.equippedSpell ? player.equippedSpell.effect : null,
+                effectStrength: multiplier
             };
             if (player.equippedSpell && player.equippedSpell.spread && isPlayer && arrows.length + 2 < MAX_ARROWS) {
                 arrows.push({ ...arrow, dx: dx + 0.1 });
@@ -815,8 +856,10 @@
                         for (let i = 0; i < enemies.length; i++) {
                             const enemy = enemies[i];
                             if (enemy.x === x && enemy.y === y && enemy.shieldTimer <= 0) {
-                                enemy.health -= damage;
-                                addDamagePopup(enemy.x, enemy.y, damage);
+                                let finalDamage = damage;
+                                if (enemy.resistance === 'earth') finalDamage *= 0.5;
+                                enemy.health -= finalDamage;
+                                addDamagePopup(enemy.x, enemy.y, finalDamage);
                                 let knockDx = x - centerX;
                                 let knockDy = y - centerY;
                                 if (knockDx !== 0 || knockDy !== 0) applyKnockback(enemy, knockDx, knockDy, 1);
@@ -914,7 +957,44 @@
                         }
                     }
 
-                    if (enemy.type === 'summoner') {
+                    if (enemy.burnTimer > 0) {
+                        enemy.burnTimer -= deltaTime;
+                        if (enemy.burnTimer < 0) enemy.burnTimer = 0;
+                        enemy.burnAccumulator += deltaTime;
+                        while (enemy.burnAccumulator >= BURN_INTERVAL) {
+                            enemy.health -= BURN_DAMAGE;
+                            enemy.burnAccumulator -= BURN_INTERVAL;
+                            addDamagePopup(enemy.x, enemy.y, BURN_DAMAGE);
+                            if (enemy.health <= 0) {
+                                player.xp += 50;
+                                checkLevelUp();
+                                updateInfo();
+                                createParticles(enemy.x, enemy.y, 20, 'red', 3, 0.5);
+                                dropLoot(enemy.x, enemy.y);
+                                enemies.splice(i, 1);
+                                i--;
+                                break;
+                            }
+                        }
+                        createParticles(enemy.x, enemy.y, 1, 'orange', 0.5, 0.1);
+                    }
+
+                    if (enemy.slowTimer > 0) {
+                        enemy.slowTimer -= deltaTime;
+                        if (enemy.slowTimer < 0) enemy.slowTimer = 0;
+                        enemy.moveCooldown += deltaTime * (1 / SLOW_FACTOR - 1);
+                        createParticles(enemy.x, enemy.y, 1, 'blue', 0.5, 0.1);
+                    }
+
+                    if (enemy.stunTimer > 0) {
+                        enemy.stunTimer -= deltaTime;
+                        if (enemy.stunTimer < 0) enemy.stunTimer = 0;
+                        enemy.moveCooldown = Math.max(enemy.moveCooldown, 0.1);
+                        enemy.fireCooldown = Math.max(enemy.fireCooldown, 0.1);
+                        createParticles(enemy.x, enemy.y, 1, 'yellow', 1, 0.05);
+                    }
+
+                    if (enemy.type === 'summoner' && enemy.stunTimer <= 0) {
                         enemy.summonCooldown -= deltaTime;
                         if (enemy.summonCooldown <= 0) {
                             const possibleSpots = [];
@@ -940,7 +1020,12 @@
                                     critChance: 0.05,
                                     poisonTimer: 0,
                                     poisonAccumulator: 0,
-                                    poisonParticleTimer: 0
+                                    poisonParticleTimer: 0,
+                                    resistance: 'fire',
+                                    burnTimer: 0,
+                                    burnAccumulator: 0,
+                                    slowTimer: 0,
+                                    stunTimer: 0
                                 };
                                 enemies.push(newEnemy);
                                 enemy.summonCooldown = 5;
@@ -949,7 +1034,7 @@
                         }
                     }
 
-                    if (enemy.type === 'mage') {
+                    if (enemy.type === 'mage' && enemy.stunTimer <= 0) {
                         enemy.spellCooldown -= deltaTime;
                         if (enemy.spellCooldown <= 0 && isInLineOfSight(enemy) && player.invisibilityTimer <= 0) {
                             const spell = enemy.spells[Math.floor(Math.random() * enemy.spells.length)];
@@ -965,7 +1050,7 @@
                         }
                     }
 
-                    if (enemy.fireCooldown <= 0 && enemy.fireChance > 0 && Math.random() < enemy.fireChance && isInLineOfSight(enemy) && player.invisibilityTimer <= 0) {
+                    if (enemy.fireCooldown <= 0 && enemy.fireChance > 0 && Math.random() < enemy.fireChance && isInLineOfSight(enemy) && player.invisibilityTimer <= 0 && enemy.stunTimer <= 0) {
                         const direction = getDirectionToPlayer(enemy);
                         if (direction) {
                             const attackType = chooseAttackType(enemy);
@@ -975,7 +1060,7 @@
                             enemy.fireCooldown = 1;
                         }
                     }
-                    if (enemy.moveCooldown <= 0) {
+                    if (enemy.moveCooldown <= 0 && enemy.stunTimer <= 0) {
                         const target = getClosestTarget(enemy);
                         const dir = getDirectionToTarget(enemy, target);
                         const newX = enemy.x + dir.dx;
@@ -1027,7 +1112,11 @@
                         applyAoEDamage(cellX, cellY, arrow.damage);
                         createExplosionParticles(cellX, cellY, arrow.damage);
                     } else {
-                        createParticles(cellX, cellY, 10 * arrow.size, arrow.color, 2, 0.3);
+                        if (arrow.element === 'fire') createParticles(cellX, cellY, 20, 'red', 2, 0.5);
+                        else if (arrow.element === 'ice') createParticles(cellX, cellY, 20, 'blue', 2, 0.5);
+                        else if (arrow.element === 'lightning') createParticles(cellX, cellY, 20, 'yellow', 3, 0.3);
+                        else if (arrow.element === 'earth') createParticles(cellX, cellY, 20, 'brown', 2, 0.5);
+                        else createParticles(cellX, cellY, 10 * arrow.size, arrow.color, 2, 0.3);
                     }
                     arrows.splice(i, 1);
                 } else if (arrow.isPlayer) {
@@ -1038,20 +1127,36 @@
                                 applyAoEDamage(cellX, cellY, arrow.damage);
                                 createExplosionParticles(cellX, cellY, arrow.damage);
                             } else if (enemy.shieldTimer <= 0) {
-                                enemy.health -= arrow.damage;
+                                let finalDamage = arrow.damage;
+                                if (arrow.element && enemy.resistance === arrow.element) {
+                                    finalDamage *= 0.5;
+                                }
+                                enemy.health -= finalDamage;
                                 const dx = enemy.x - player.x;
                                 const dy = enemy.y - player.y;
                                 applyKnockback(enemy, dx, dy, 2);
                                 if (arrow.isCritical) {
-                                    addCriticalDamagePopup(enemy.x, enemy.y, arrow.damage);
+                                    addCriticalDamagePopup(enemy.x, enemy.y, finalDamage);
                                 } else {
-                                    addDamagePopup(enemy.x, enemy.y, arrow.damage);
+                                    addDamagePopup(enemy.x, enemy.y, finalDamage);
                                 }
-                                createParticles(enemy.x, enemy.y, 15 * arrow.size, arrow.color, 2, 0.4);
+                                if (arrow.element === 'fire') createParticles(enemy.x, enemy.y, 20, 'red', 2, 0.5);
+                                else if (arrow.element === 'ice') createParticles(enemy.x, enemy.y, 20, 'blue', 2, 0.5);
+                                else if (arrow.element === 'lightning') createParticles(enemy.x, enemy.y, 20, 'yellow', 3, 0.3);
+                                else if (arrow.element === 'earth') createParticles(enemy.x, enemy.y, 20, 'brown', 2, 0.5);
+                                else createParticles(enemy.x, enemy.y, 15 * arrow.size, arrow.color, 2, 0.4);
                                 if (arrow.isPoison) {
                                     enemy.poisonTimer = POISON_DURATION;
                                     enemy.poisonAccumulator = 0;
                                     enemy.poisonParticleTimer = 0;
+                                }
+                                if (arrow.effect === 'burn') {
+                                    enemy.burnTimer = 5 * arrow.effectStrength;
+                                    enemy.burnAccumulator = 0;
+                                } else if (arrow.effect === 'slow') {
+                                    enemy.slowTimer = 3 * arrow.effectStrength;
+                                } else if (arrow.effect === 'stun' && Math.random() < 0.2) {
+                                    enemy.stunTimer = 2 * arrow.effectStrength;
                                 }
                                 if (enemy.health <= 0) {
                                     player.xp += 50;
@@ -1165,6 +1270,7 @@
             document.getElementById('health').innerText = `Health: ${Math.floor(player.health)}/${player.maxHealth}`;
             document.getElementById('level').innerText = `Level: ${player.level}`;
             document.getElementById('xp').innerText = `XP: ${player.xp}/${player.xpToNext}`;
+            document.getElementById('equippedSpell').innerText = `Spell: ${player.equippedSpell ? player.equippedSpell.name : 'None'}`;
         }
 
         function isInLineOfSight(enemy) {
@@ -1206,26 +1312,56 @@
             document.getElementById('equippedArmor').textContent = `Armor: ${player.equippedArmor ? player.equippedArmor.name : 'None'}`;
             const list = document.getElementById('inventoryList');
             list.innerHTML = '';
+
+            const groups = {
+                spell: { label: 'Spells', items: [] },
+                armor: { label: 'Armor', items: [] },
+                potion: { label: 'Potions', items: [] },
+                other: { label: 'Other Items', items: [] }
+            };
+
             player.inventory.forEach((item, index) => {
-                const li = document.createElement('li');
-                li.textContent = item.name || item.type;
-                li.draggable = true;
-                li.setAttribute('data-index', index);
-                li.addEventListener('dragstart', (e) => e.dataTransfer.setData('text/plain', index));
-                const useButton = document.createElement('button');
-                useButton.textContent = 'Use';
-                useButton.addEventListener('click', () => useItem(index));
-                li.appendChild(useButton);
-                list.appendChild(li);
+                const group = item.type === 'spell' ? 'spell' : 
+                              item.type === 'armor' ? 'armor' : 
+                              item.type === 'potion' ? 'potion' : 'other';
+                groups[group].items.push({ item, index });
             });
+
+            for (const [key, group] of Object.entries(groups)) {
+                if (group.items.length > 0) {
+                    const header = document.createElement('h4');
+                    header.textContent = group.label;
+                    list.appendChild(header);
+                    group.items.forEach(({ item, index }) => {
+                        const li = document.createElement('li');
+                        let icon = item.type === 'spell' ? '✨' : item.type === 'armor' ? '🛡️' : item.type === 'potion' ? '🧪' : '🎁';
+                        li.textContent = `${icon} ${item.name || item.type}`;
+                        li.title = item.description || 'No description available.';
+                        li.draggable = true;
+                        li.setAttribute('data-index', index);
+                        li.addEventListener('dragstart', (e) => e.dataTransfer.setData('text/plain', index));
+                        const actionButton = document.createElement('button');
+                        actionButton.textContent = item.type === 'spell' || item.type === 'armor' ? 'Equip' : 
+                                                  item.type === 'potion' ? 'Consume' : 'Use';
+                        actionButton.addEventListener('click', () => useItem(index));
+                        li.appendChild(actionButton);
+                        list.appendChild(li);
+                    });
+                }
+            }
         }
 
         function useItem(index) {
             const item = player.inventory[index];
             if (item.type === 'spell') {
+                if (!hasEquippedSpell) {
+                    showNotification("You've equipped a spell. Use the firing controls to cast it in combat—it won't be consumed.");
+                    hasEquippedSpell = true;
+                }
                 if (player.equippedSpell) player.inventory.push(player.equippedSpell);
                 player.equippedSpell = item;
                 player.inventory.splice(index, 1);
+                updateInfo();
             } else if (item.type === 'armor') {
                 if (player.equippedArmor) player.inventory.push(player.equippedArmor);
                 player.equippedArmor = item;
@@ -1245,12 +1381,23 @@
         const quickSlots = document.querySelectorAll('.quickSlot');
         quickSlots.forEach(slot => {
             slot.addEventListener('click', () => useQuickAccessItem(parseInt(slot.getAttribute('data-slot'), 10)));
-            slot.addEventListener('dragover', (e) => e.preventDefault());
-            slot.addEventListener('drop', (e) => {
+            slot.addEventListener('dragover', (e) => {
                 e.preventDefault();
                 const index = e.dataTransfer.getData('text/plain');
                 const item = player.inventory[index];
-                if (item && (item.type === 'potion' || item.effect)) {
+                if (item && (item.type === 'potion' || typeof item.effect === 'function')) {
+                    slot.classList.remove('drag-reject');
+                } else {
+                    slot.classList.add('drag-reject');
+                }
+            });
+            slot.addEventListener('dragleave', () => slot.classList.remove('drag-reject'));
+            slot.addEventListener('drop', (e) => {
+                e.preventDefault();
+                slot.classList.remove('drag-reject');
+                const index = e.dataTransfer.getData('text/plain');
+                const item = player.inventory[index];
+                if (item && (item.type === 'potion' || typeof item.effect === 'function')) {
                     const slotIndex = parseInt(slot.getAttribute('data-slot'), 10);
                     player.quickAccess[slotIndex] = item;
                     player.inventory.splice(index, 1);
@@ -1265,6 +1412,7 @@
                 const slotIndex = parseInt(slot.getAttribute('data-slot'), 10);
                 const item = player.quickAccess[slotIndex];
                 slot.querySelector('.item').textContent = item ? item.symbol : '';
+                slot.title = item ? item.description : '';
             });
         }
 
@@ -1287,9 +1435,20 @@
         const spellSlots = document.querySelectorAll('.spellSlot');
         spellSlots.forEach(slot => {
             slot.addEventListener('click', () => equipSpellFromQuickAccess(parseInt(slot.getAttribute('data-slot'), 10)));
-            slot.addEventListener('dragover', (e) => e.preventDefault());
+            slot.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                const index = e.dataTransfer.getData('text/plain');
+                const item = player.inventory[index];
+                if (item && item.type === 'spell') {
+                    slot.classList.remove('drag-reject');
+                } else {
+                    slot.classList.add('drag-reject');
+                }
+            });
+            slot.addEventListener('dragleave', () => slot.classList.remove('drag-reject'));
             slot.addEventListener('drop', (e) => {
                 e.preventDefault();
+                slot.classList.remove('drag-reject');
                 const index = e.dataTransfer.getData('text/plain');
                 const item = player.inventory[index];
                 if (item && item.type === 'spell') {
@@ -1307,6 +1466,12 @@
                 const slotIndex = parseInt(slot.getAttribute('data-slot'), 10);
                 const item = player.spellQuickAccess[slotIndex];
                 slot.querySelector('.item').textContent = item ? item.symbol : '';
+                slot.title = item ? item.description : '';
+                if (item && item === player.equippedSpell) {
+                    slot.style.borderColor = 'gold';
+                } else {
+                    slot.style.borderColor = '#ccc';
+                }
             });
         }
 
@@ -1318,6 +1483,7 @@
                 player.spellQuickAccess[slotIndex] = temp;
                 updateInventoryDisplay();
                 updateSpellQuickAccessDisplay();
+                updateInfo();
             }
         }
 
