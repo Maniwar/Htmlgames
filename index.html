@@ -334,7 +334,7 @@
                 ctx.fillStyle = 'green';
                 ctx.fillRect(renderX * cellSize + (cellSize - healthBarWidth) / 2, renderY * cellSize - 10, healthBarWidth * healthRatio, healthBarHeight);
             });
-            ctx.fillText("🧙", player.x * cellSize + cellSize / 2, player.y * cellSize + cellSize / 2); // Updated to mage emoji
+            ctx.fillText("🧙", player.x * cellSize + cellSize / 2, player.y * cellSize + cellSize / 2);
             const healthBarWidth = 30;
             const healthBarHeight = 5;
             const healthRatio = player.health / player.maxHealth;
@@ -353,7 +353,7 @@
             if (player.speedBoostTimer > 0) {
                 player.trail.forEach((pos, i) => {
                     ctx.globalAlpha = 0.1 * (3 - i);
-                    ctx.fillText("🧙", pos.x * cellSize + cellSize / 2, pos.y * cellSize + cellSize / 2); // Updated trail to mage emoji
+                    ctx.fillText("🧙", pos.x * cellSize + cellSize / 2, pos.y * cellSize + cellSize / 2);
                 });
                 ctx.globalAlpha = 1;
             }
@@ -450,9 +450,9 @@
             if (roll < 0.5 || (isLastEnemy && !hasDroppedThisStage)) {
                 let typeRoll = Math.random();
                 let type;
-                if (typeRoll < 0.7) type = rareWeapons; // 70% chance for weapon
-                else if (typeRoll < 0.9) type = rareArmor; // 20% chance for armor
-                else type = rarePotions; // 10% chance for potion
+                if (typeRoll < 0.7) type = rareWeapons;
+                else if (typeRoll < 0.9) type = rareArmor;
+                else type = rarePotions;
                 const item = type[Math.floor(Math.random() * type.length)];
                 drops.push({ x, y, ...item });
                 hasDroppedThisStage = true;
@@ -488,6 +488,8 @@
                                     applyKnockback(enemy, knockDx, knockDy, 1);
                                 }
                                 if (enemy.health <= 0) {
+                                    player.xp += 50; // Award 50 XP per enemy defeated
+                                    checkLevelUp();
                                     dropLoot(enemy.x, enemy.y);
                                     enemies.splice(i, 1);
                                     i--;
@@ -497,6 +499,19 @@
                         }
                     }
                 }
+            }
+        }
+
+        function checkLevelUp() {
+            if (player.xp >= player.xpToNext) {
+                player.level += 1;
+                player.xp -= player.xpToNext; // Subtract used XP
+                player.xpToNext = Math.floor(player.xpToNext * 1.5); // Increase XP requirement by 50%
+                player.maxHealth += 20; // Increase max health
+                player.health = player.maxHealth; // Fully heal on level up
+                player.attack += 5; // Increase attack power
+                alert(`Level Up! You are now Level ${player.level}. Max Health: ${player.maxHealth}, Attack: ${player.attack}`);
+                updateInfo();
             }
         }
 
@@ -569,7 +584,6 @@
                         if (newX >= 0 && newX < mapSize && newY >= 0 && newY < mapSize && currentMap[newY][newX] === 0) {
                             enemy.x = newX;
                             enemy.y = newY;
-                            // No loot pickup for enemies
                         }
                         enemy.moveCooldown = enemy.moveSpeed;
                     }
@@ -603,6 +617,8 @@
                                     addDamagePopup(enemy.x, enemy.y, arrow.damage);
                                 }
                                 if (enemy.health <= 0) {
+                                    player.xp += 50; // Award 50 XP per enemy defeated
+                                    checkLevelUp();
                                     dropLoot(enemy.x, enemy.y);
                                     enemies.splice(j, 1);
                                     j--;
