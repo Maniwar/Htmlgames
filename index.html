@@ -164,7 +164,7 @@
         let lastTimestamp = 0;
         let hasDroppedThisStage = false;
 
-        // Rare Loot Definitions
+        // **Rare Loot Definitions**
         const rareWeapons = [
             { type: 'weapon', name: 'Bow', attack: 15, fireRate: 0.5, symbol: '🏹', spread: false, isAoE: false },
             { type: 'weapon', name: 'Crossbow', attack: 20, fireRate: 0.3, symbol: '🏹', spread: false, isAoE: false },
@@ -181,7 +181,7 @@
             { type: 'potion', name: 'Health Potion', effect: { health: 50 }, symbol: '🧪' }
         ];
 
-        // Procedural Map Generation
+        // **Procedural Map Generation**
         function generateMap() {
             let map = Array(mapSize).fill().map(() => Array(mapSize).fill(0));
             for (let y = 0; y < mapSize; y++) {
@@ -240,7 +240,7 @@
             return visited[8][8];
         }
 
-        // Enemy and Loot Generation
+        // **Enemy and Loot Generation**
         function generateEnemies(stage) {
             const baseHealth = 50 + (stage - 1) * 10;
             const baseAttack = 5 + Math.floor((stage - 1) / 2);
@@ -302,7 +302,7 @@
             target.y = y;
         }
 
-        // Drawing Functions
+        // **Drawing Functions**
         function drawMap() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             ctx.font = "30px Arial";
@@ -380,7 +380,7 @@
             });
         }
 
-        // Game Logic
+        // **Game Logic**
         function movePlayer(dx, dy) {
             const newX = player.x + dx;
             const newY = player.y + dy;
@@ -490,6 +490,7 @@
                                 if (enemy.health <= 0) {
                                     player.xp += 50; // Award 50 XP per enemy defeated
                                     checkLevelUp();
+                                    updateInfo(); // Update UI immediately
                                     dropLoot(enemy.x, enemy.y);
                                     enemies.splice(i, 1);
                                     i--;
@@ -511,7 +512,7 @@
                 player.health = player.maxHealth; // Fully heal on level up
                 player.attack += 5; // Increase attack power
                 alert(`Level Up! You are now Level ${player.level}. Max Health: ${player.maxHealth}, Attack: ${player.attack}`);
-                updateInfo();
+                updateInfo(); // Update UI after level-up
             }
         }
 
@@ -619,6 +620,7 @@
                                 if (enemy.health <= 0) {
                                     player.xp += 50; // Award 50 XP per enemy defeated
                                     checkLevelUp();
+                                    updateInfo(); // Update UI immediately
                                     dropLoot(enemy.x, enemy.y);
                                     enemies.splice(j, 1);
                                     j--;
@@ -663,7 +665,7 @@
             requestAnimationFrame(gameLoop);
         }
 
-        // Helper Functions
+        // **Helper Functions**
         function addDamagePopup(x, y, damage) {
             popups.push({ text: `-${damage}`, x, y, timeToLive: 1, isDamage: true });
         }
@@ -734,7 +736,7 @@
             return dy > 0 ? directions.down : directions.up;
         }
 
-        // Inventory Management
+        // **Inventory Management**
         function updateInventoryDisplay() {
             document.getElementById('equippedWeapon').textContent = `Weapon: ${player.equippedWeapon ? player.equippedWeapon.name : 'None'}`;
             document.getElementById('equippedArmor').textContent = `Armor: ${player.equippedArmor ? player.equippedArmor.name : 'None'}`;
@@ -777,7 +779,7 @@
             updateInventoryDisplay();
         }
 
-        // Quick Access Bar Logic
+        // **Quick Access Bar Logic**
         const quickSlots = document.querySelectorAll('.quickSlot');
         quickSlots.forEach((slot) => {
             slot.addEventListener('click', () => {
@@ -820,7 +822,7 @@
             });
         }
 
-        // Event Listeners for Movement and Firing
+        // **Event Listeners for Movement and Firing**
         document.getElementById('moveUp').addEventListener('pointerdown', () => movingUp = true);
         document.getElementById('moveUp').addEventListener('pointerup', () => movingUp = false);
         document.getElementById('moveLeft').addEventListener('pointerdown', () => movingLeft = true);
