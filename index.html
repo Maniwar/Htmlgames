@@ -20,7 +20,7 @@
             flex-direction: column;
             align-items: center;
             width: 100%;
-            max-width: 800px; /* Limits the maximum width for larger screens */
+            max-width: 800px;
         }
         #gameCanvas {
             border: 1px solid #000;
@@ -28,7 +28,7 @@
         }
         #controls, #quickAccessBar, #weaponQuickBar {
             width: 100%;
-            max-width: 400px; /* Matches canvas max width */
+            max-width: 400px;
             margin-top: 10px;
         }
         #controls {
@@ -91,7 +91,7 @@
         #quickAccessBar, #weaponQuickBar {
             display: flex;
             justify-content: center;
-            flex-wrap: wrap; /* Allows slots to wrap on small screens */
+            flex-wrap: wrap;
         }
         .quickSlot, .weaponSlot {
             position: relative;
@@ -123,6 +123,18 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
+        }
+        #notification {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+            display: none;
+            font-family: Arial, sans-serif;
         }
     </style>
 </head>
@@ -169,13 +181,14 @@
             <div class="weaponSlot" data-slot="1"><span class="key">7</span><span class="item"></span></div>
             <div class="weaponSlot" data-slot="2"><span class="key">8</span><span class="item"></span></div>
         </div>
+        <div id="notification"></div>
     </div>
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-        const cellSize = 40; // Logical cell size
+        const cellSize = 40;
         const mapSize = 10;
-        const logicalWidth = 400; // Logical canvas size
+        const logicalWidth = 400;
         const logicalHeight = 400;
         const directions = {
             up: { dx: 0, dy: -1 },
@@ -183,8 +196,9 @@
             right: { dx: 1, dy: 0 },
             down: { dx: 0, dy: 1 }
         };
+        const MAX_ARROWS = 50;  // Cap on number of arrows
+        const MAX_PARTICLES = 500;  // Cap on number of particles
 
-        // Dynamic scaling setup
         function resizeCanvas() {
             const displaySize = Math.min(window.innerWidth, window.innerHeight) * 0.8;
             const pixelRatio = window.devicePixelRatio || 1;
@@ -206,7 +220,9 @@
             healthRegenTimer: 0, explosiveArrowsTimer: 0, slowTimer: 0, trail: [],
             equippedWeapon: null, equippedArmor: null, inventory: [],
             quickAccess: [null, null, null, null, null],
-            weaponQuickAccess: [null, null, null]
+            weaponQuickAccess: [null, null, null],
+            charging: { up: false, left: false, right: false, down: false },
+            chargeStartTime: { up: 0, left: 0, right: 0, down: 0 }
         };
         let currentMap = generateMap();
         let enemies = generateEnemies(stage);
@@ -223,11 +239,6 @@
         let countdownActive = false;
         let countdownTimer = 0;
         let countdownText = '';
-
-        let firingUpPressed = false;
-        let firingLeftPressed = false;
-        let firingRightPressed = false;
-        let firingDownPressed = false;
 
         const tileSets = [
             { wall: '🧱', floorColor: '#808080' },
@@ -253,28 +264,74 @@
             { type: 'potion', name: 'Health Potion', effect: { health: 50 }, symbol: '🧪' }
         ];
 
+        const attackMultipliers = {
+            normal: 1,
+            strong: 1.5,
+            veryStrong: 2,
+            hyper: 3
+        };
+
+        const enemyAttackTypes = {
+            grunt: { normal: 0.7, strong: 0.2, veryStrong: 0.1 },
+            sniper: { normal: 0.5, strong: 0.3, veryStrong: 0.2 },
+            tank: { normal: 0.4, strong: 0.3, veryStrong: 0.3 },
+            summoner: { normal: 0.6, strong: 0.3, veryStrong: 0.1 },
+            mage: { normal: 0.5, strong: 0.3, hyper: 0.2 }
+        };
+
+        function chooseAttackType(enemy) {
+            const types = enemyAttackTypes[enemy.type];
+            const rand = Math.random();
+            let cumulative = 0;
+            for (const [type, prob] of Object.entries(types)) {
+                cumulative += prob;
+                if (rand < cumulative) return type;
+            }
+            return 'normal';
+        }
+
+        function getArrowSize(damage) {
+            const baseDamage = 10;
+            return Math.min(3, damage / baseDamage);
+        }
+
         function generateMap() {
             let map = Array(mapSize).fill().map(() => Array(mapSize).fill(0));
             for (let y = 0; y < mapSize; y++) {
                 for (let x = 0; x < mapSize; x++) {
-                    map[y][x] = Math.random() < 0.45 ? 1 : 0;
+                    map[y][x] = Math.random() < 0.5 ? 1 : 0;
                 }
             }
-            for (let i = 0; i < 4; i++) {
+            for (let i = 0; i < 5; i++) {
                 map = cellularAutomataStep(map);
             }
-            map[1][1] = 0; // Start
-            map[8][8] = 0; // Exit
-            if (!isConnected(map)) return generateMap();
-            return map;
+            for (let y = 1; y < mapSize - 1; y++) {
+                for (let x = 1; x < mapSize - 1; x++) {
+                    if (map[y][x] === 0 && isIsolated(x, y, map) && Math.random() < 0.1) {
+                        map[y][x] = 1;
+                    }
+                }
+            }
+            map[1][1] = 0; // Start position
+            map[8][8] = 0; // Exit position
+            return isConnected(map) ? map : generateMap();
+        }
+
+        function isIsolated(x, y, map) {
+            for (let dy = -1; dy <= 1; dy++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                    if (dx === 0 && dy === 0) continue;
+                    if (map[y + dy][x + dx] === 1) return false;
+                }
+            }
+            return true;
         }
 
         function cellularAutomataStep(map) {
             const newMap = map.map(row => row.slice());
             for (let y = 0; y < mapSize; y++) {
                 for (let x = 0; x < mapSize; x++) {
-                    const wallNeighbors = countWallNeighbors(map, x, y);
-                    newMap[y][x] = wallNeighbors >= 5 ? 1 : 0;
+                    newMap[y][x] = countWallNeighbors(map, x, y) >= 5 ? 1 : 0;
                 }
             }
             return newMap;
@@ -331,24 +388,13 @@
                     y = Math.floor(Math.random() * mapSize);
                 } while (currentMap[y][x] !== 0 || (x === 1 && y === 1) || (x === 8 && y === 8) || enemyList.some(e => e.x === x && e.y === y));
                 const enemy = {
-                    x, y,
-                    health: type.health,
-                    maxHealth: type.maxHealth,
+                    x, y, health: type.health, maxHealth: type.maxHealth,
                     attack: type.attack + Math.floor(Math.random() * 3) - 1,
-                    moveCooldown: 0,
-                    fireCooldown: 0,
-                    type: type.type,
+                    moveCooldown: 0, fireCooldown: 0, type: type.type,
                     fireChance: type.fireChance + Math.random() * 0.05,
                     moveSpeed: type.moveSpeed + Math.random() * 0.2,
-                    symbol: type.symbol,
-                    speedBoostTimer: 0,
-                    megaDamageTimer: 0,
-                    shieldTimer: 0,
-                    renderX: x,
-                    renderY: y,
-                    bounceTargetX: null,
-                    bounceTargetY: null,
-                    bounceTimer: 0
+                    symbol: type.symbol, speedBoostTimer: 0, megaDamageTimer: 0, shieldTimer: 0,
+                    renderX: x, renderY: y, bounceTargetX: null, bounceTargetY: null, bounceTimer: 0
                 };
                 if (type.type === 'summoner') enemy.summonCooldown = type.summonCooldown;
                 if (type.type === 'mage') {
@@ -396,7 +442,10 @@
         }
 
         function createParticles(x, y, count, color, speed, life) {
-            for (let i = 0; i < count; i++) {
+            if (particles.length + count > MAX_PARTICLES) {
+                particles.splice(0, particles.length + count - MAX_PARTICLES);
+            }
+            for (let i = 0; i < count && particles.length < MAX_PARTICLES; i++) {
                 const angle = Math.random() * Math.PI * 2;
                 const velocity = (Math.random() * speed) + 1;
                 particles.push({
@@ -417,9 +466,10 @@
             particles.slice(-20).forEach(p => p.dy -= 1);
         }
 
-        function createExplosionParticles(x, y) {
-            createParticles(x, y, 30, 'yellow', 5, 0.3);
-            createParticles(x, y, 20, 'orange', 3, 0.5);
+        function createExplosionParticles(x, y, damage) {
+            const size = getArrowSize(damage);
+            createParticles(x, y, 30 * size, 'yellow', 5, 0.3);
+            createParticles(x, y, 20 * size, 'orange', 3, 0.5);
         }
 
         function updateParticles(deltaTime) {
@@ -523,11 +573,9 @@
 
             enemies.forEach(enemy => {
                 const renderX = enemy.bounceTimer > 0 ? 
-                    enemy.x + (enemy.bounceTargetX - enemy.x) * (1 - enemy.bounceTimer / 0.2) : 
-                    enemy.x;
+                    enemy.x + (enemy.bounceTargetX - enemy.x) * (1 - enemy.bounceTimer / 0.2) : enemy.x;
                 const renderY = enemy.bounceTimer > 0 ? 
-                    enemy.y + (enemy.bounceTargetY - enemy.y) * (1 - enemy.bounceTimer / 0.2) : 
-                    enemy.y;
+                    enemy.y + (enemy.bounceTargetY - enemy.y) * (1 - enemy.bounceTimer / 0.2) : enemy.y;
                 ctx.fillText(enemy.symbol, renderX * cellSize + cellSize / 2, renderY * cellSize + cellSize / 2);
                 const healthBarWidth = 30;
                 const healthBarHeight = 5;
@@ -570,8 +618,9 @@
 
         function drawArrows() {
             arrows.forEach(arrow => {
+                const size = arrow.size || 1;
                 ctx.strokeStyle = arrow.isPlayer ? (player.megaDamageTimer > 0 ? `hsl(300, 100%, ${50 + Math.sin(pulseTime * 5) * 20}%)` : 'blue') : 'red';
-                ctx.lineWidth = player.megaDamageTimer > 0 && arrow.isPlayer ? 4 + Math.sin(pulseTime * 2) : 2;
+                ctx.lineWidth = (player.megaDamageTimer > 0 && arrow.isPlayer ? 4 : 2) * size;
                 ctx.beginPath();
                 ctx.moveTo(arrow.x * cellSize, arrow.y * cellSize);
                 ctx.lineTo((arrow.x + arrow.dx * 0.5) * cellSize, (arrow.y + arrow.dy * 0.5) * cellSize);
@@ -580,7 +629,7 @@
                 ctx.globalAlpha = 0.5;
                 ctx.fillStyle = arrow.isPlayer ? 'cyan' : 'orange';
                 ctx.beginPath();
-                ctx.arc(arrow.x * cellSize, arrow.y * cellSize, 2, 0, Math.PI * 2);
+                ctx.arc(arrow.x * cellSize, arrow.y * cellSize, 2 * size, 0, Math.PI * 2);
                 ctx.fill();
                 ctx.globalAlpha = 1;
             });
@@ -641,25 +690,22 @@
             }
         }
 
-        function fireArrow(x, y, dx, dy, isPlayer = true) {
-            const weaponBonus = player.equippedWeapon ? player.equippedWeapon.attack : 0;
+        function fireArrow(x, y, dx, dy, isPlayer = true, customDamage = null) {
+            if (arrows.length >= MAX_ARROWS) return;  // Prevent arrow overflow
+            const weaponBonus = isPlayer && player.equippedWeapon ? player.equippedWeapon.attack : 0;
             const baseDamage = isPlayer ? player.attack : 5;
-            const damage = (player.megaDamageTimer > 0 && isPlayer ? (baseDamage + weaponBonus) * 2 : (baseDamage + weaponBonus));
+            let damage = customDamage !== null ? customDamage : (isPlayer ? (player.megaDamageTimer > 0 ? (baseDamage + weaponBonus) * 2 : (baseDamage + weaponBonus)) : baseDamage);
+            const size = getArrowSize(damage);
             const arrow = { 
-                x: x + 0.5, 
-                y: y + 0.5, 
-                dx, 
-                dy, 
-                isPlayer, 
-                damage, 
-                isAoE: player.equippedWeapon ? player.equippedWeapon.isAoE : false || (player.explosiveArrowsTimer > 0 && isPlayer)
+                x: x + 0.5, y: y + 0.5, dx, dy, isPlayer, damage, size,
+                isAoE: isPlayer && (player.equippedWeapon ? player.equippedWeapon.isAoE : false) || (player.explosiveArrowsTimer > 0)
             };
-            if (player.equippedWeapon && player.equippedWeapon.spread && isPlayer) {
+            if (player.equippedWeapon && player.equippedWeapon.spread && isPlayer && arrows.length + 2 < MAX_ARROWS) {
                 arrows.push({ ...arrow, dx: dx + 0.1 });
                 arrows.push({ ...arrow, dx: dx - 0.1 });
             }
             arrows.push(arrow);
-            if (player.doubleArrowTimer > 0 && isPlayer) {
+            if (player.doubleArrowTimer > 0 && isPlayer && arrows.length < MAX_ARROWS) {
                 arrows.push({ ...arrow, x: x + 0.5 + (dx * 0.1), y: y + 0.5 + (dy * 0.1) });
             }
             if (isPlayer) player.fireCooldown = player.equippedWeapon ? player.equippedWeapon.fireRate : 0.5;
@@ -684,28 +730,17 @@
             let drops = [];
             const roll = Math.random();
             const isLastEnemy = enemies.length === 1;
-
             if (roll < 0.5 || (isLastEnemy && !hasDroppedThisStage)) {
                 let typeRoll = Math.random();
-                let type;
-                if (typeRoll < 0.7) type = rareWeapons;
-                else if (typeRoll < 0.9) type = rareArmor;
-                else type = rarePotions;
-                const item = type[Math.floor(Math.random() * type.length)];
-                drops.push({ x, y, ...item });
+                let type = typeRoll < 0.7 ? rareWeapons : typeRoll < 0.9 ? rareArmor : rarePotions;
+                drops.push({ x, y, ...type[Math.floor(Math.random() * type.length)] });
                 hasDroppedThisStage = true;
             }
-
             if (Math.random() < 0.2) {
                 let typeRoll = Math.random();
-                let type;
-                if (typeRoll < 0.7) type = rareWeapons;
-                else if (typeRoll < 0.9) type = rareArmor;
-                else type = rarePotions;
-                const item = type[Math.floor(Math.random() * type.length)];
-                drops.push({ x, y, ...item });
+                let type = typeRoll < 0.7 ? rareWeapons : typeRoll < 0.9 ? rareArmor : rarePotions;
+                drops.push({ x, y, ...type[Math.floor(Math.random() * type.length)] });
             }
-
             drops.forEach(drop => loot.push(drop));
         }
 
@@ -722,9 +757,7 @@
                                 addDamagePopup(enemy.x, enemy.y, damage);
                                 let knockDx = x - centerX;
                                 let knockDy = y - centerY;
-                                if (knockDx !== 0 || knockDy !== 0) {
-                                    applyKnockback(enemy, knockDx, knockDy, 1);
-                                }
+                                if (knockDx !== 0 || knockDy !== 0) applyKnockback(enemy, knockDx, knockDy, 1);
                                 if (enemy.health <= 0) {
                                     player.xp += 50;
                                     checkLevelUp();
@@ -750,7 +783,7 @@
                 player.maxHealth += 20;
                 player.health = player.maxHealth;
                 player.attack += 5;
-                alert(`Level Up! You are now Level ${player.level}. Max Health: ${player.maxHealth}, Attack: ${player.attack}`);
+                showNotification(`Level Up! Level ${player.level}. Max Health: ${player.maxHealth}, Attack: ${player.attack}`);
                 createParticles(player.x, player.y, 30, 'gold', 2, 1);
                 updateInfo();
             }
@@ -787,8 +820,8 @@
             if (player.explosiveArrowsTimer < 0) player.explosiveArrowsTimer = 0;
             if (player.slowTimer < 0) player.slowTimer = 0;
 
-            if (player.healthRegenTimer > 0) {
-                player.health = Math.min(player.maxHealth, player.health + 1);
+            if (player.healthRegenTimer > 0 && player.health < player.maxHealth) {
+                player.health = Math.min(player.maxHealth, player.health + deltaTime * 10);
                 createHealParticles(player.x, player.y);
                 updateInfo();
             }
@@ -835,25 +868,12 @@
                             if (possibleSpots.length > 0) {
                                 const spot = possibleSpots[Math.floor(Math.random() * possibleSpots.length)];
                                 const newEnemy = {
-                                    x: spot.x,
-                                    y: spot.y,
-                                    health: 50,
-                                    maxHealth: 50,
-                                    attack: 5,
-                                    moveCooldown: 0,
-                                    fireCooldown: 0,
-                                    type: 'grunt',
+                                    x: spot.x, y: spot.y, health: 50, maxHealth: 50, attack: 5,
+                                    moveCooldown: 0, fireCooldown: 0, type: 'grunt',
                                     fireChance: 0.05 + Math.random() * 0.05,
                                     moveSpeed: 0.5 + Math.random() * 0.2,
-                                    symbol: '👾',
-                                    speedBoostTimer: 0,
-                                    megaDamageTimer: 0,
-                                    shieldTimer: 0,
-                                    renderX: spot.x,
-                                    renderY: spot.y,
-                                    bounceTargetX: null,
-                                    bounceTargetY: null,
-                                    bounceTimer: 0
+                                    symbol: '👾', speedBoostTimer: 0, megaDamageTimer: 0, shieldTimer: 0,
+                                    renderX: spot.x, renderY: spot.y, bounceTargetX: null, bounceTargetY: null, bounceTimer: 0
                                 };
                                 enemies.push(newEnemy);
                                 enemy.summonCooldown = 5;
@@ -869,7 +889,7 @@
                             if (spell === 'fireball') {
                                 applyAoEDamage(player.x, player.y, 10);
                                 addExplosion(player.x, player.y, false);
-                                createExplosionParticles(player.x, player.y);
+                                createExplosionParticles(player.x, player.y, 10);
                             } else if (spell === 'slow') {
                                 player.slowTimer = 5;
                                 createParticles(player.x, player.y, 15, 'gray', 1, 1);
@@ -881,7 +901,10 @@
                     if (enemy.fireCooldown <= 0 && enemy.fireChance > 0 && Math.random() < enemy.fireChance && isInLineOfSight(enemy) && player.invisibilityTimer <= 0) {
                         const direction = getDirectionToPlayer(enemy);
                         if (direction) {
-                            fireArrow(enemy.x, enemy.y, direction.dx, direction.dy, false);
+                            const attackType = chooseAttackType(enemy);
+                            const multiplier = attackMultipliers[attackType];
+                            const damage = enemy.attack * multiplier;
+                            fireArrow(enemy.x, enemy.y, direction.dx, direction.dy, false, damage);
                             enemy.fireCooldown = 1;
                         }
                     }
@@ -909,9 +932,9 @@
                 if (cellX < 0 || cellX >= mapSize || cellY < 0 || cellY >= mapSize || currentMap[cellY][cellX] === 1) {
                     if (arrow.isAoE) {
                         applyAoEDamage(cellX, cellY, arrow.damage);
-                        createExplosionParticles(cellX, cellY);
+                        createExplosionParticles(cellX, cellY, arrow.damage);
                     } else {
-                        createParticles(cellX, cellY, 10, arrow.isPlayer ? 'blue' : 'red', 2, 0.3);
+                        createParticles(cellX, cellY, 10 * arrow.size, arrow.isPlayer ? 'blue' : 'red', 2, 0.3);
                     }
                     arrows.splice(i, 1);
                 } else if (arrow.isPlayer) {
@@ -920,16 +943,14 @@
                         if (enemy.x === cellX && enemy.y === cellY) {
                             if (arrow.isAoE) {
                                 applyAoEDamage(cellX, cellY, arrow.damage);
-                                createExplosionParticles(cellX, cellY);
-                            } else {
-                                if (enemy.shieldTimer <= 0) {
-                                    enemy.health -= arrow.damage;
-                                    const dx = enemy.x - player.x;
-                                    const dy = enemy.y - player.y;
-                                    applyKnockback(enemy, dx, dy, 2);
-                                    addDamagePopup(enemy.x, enemy.y, arrow.damage);
-                                    createParticles(enemy.x, enemy.y, 15, 'orange', 2, 0.4);
-                                }
+                                createExplosionParticles(cellX, cellY, arrow.damage);
+                            } else if (enemy.shieldTimer <= 0) {
+                                enemy.health -= arrow.damage;
+                                const dx = enemy.x - player.x;
+                                const dy = enemy.y - player.y;
+                                applyKnockback(enemy, dx, dy, 2);
+                                addDamagePopup(enemy.x, enemy.y, arrow.damage);
+                                createParticles(enemy.x, enemy.y, 15 * arrow.size, 'orange', 2, 0.4);
                                 if (enemy.health <= 0) {
                                     player.xp += 50;
                                     checkLevelUp();
@@ -950,17 +971,19 @@
                         arrow.dx = -arrow.dx;
                         arrow.dy = -arrow.dy;
                         arrow.isPlayer = false;
-                        createParticles(player.x, player.y, 10, 'blue', 2, 0.3);
-                        fireArrow(player.x, player.y, 0, -1, true);
-                        fireArrow(player.x, player.y, 0, 1, true);
-                        fireArrow(player.x, player.y, -1, 0, true);
-                        fireArrow(player.x, player.y, 1, 0, true);
+                        createParticles(player.x, player.y, 10 * arrow.size, 'blue', 2, 0.3);
+                        if (arrows.length + 4 < MAX_ARROWS) {
+                            fireArrow(player.x, player.y, 0, -1, true);
+                            fireArrow(player.x, player.y, 0, 1, true);
+                            fireArrow(player.x, player.y, -1, 0, true);
+                            fireArrow(player.x, player.y, 1, 0, true);
+                        }
                     } else {
                         const damage = arrow.damage - (player.equippedArmor ? player.equippedArmor.defense : 0);
                         player.health -= Math.max(damage, 0);
                         applyKnockback(player, -arrow.dx, -arrow.dy, 1);
                         addDamagePopup(player.x, player.y, Math.max(damage, 0));
-                        createParticles(player.x, player.y, 10, 'red', 2, 0.3);
+                        createParticles(player.x, player.y, 10 * arrow.size, 'red', 2, 0.3);
                         if (player.health <= 0) gameOver();
                         arrows.splice(i, 1);
                     }
@@ -984,7 +1007,7 @@
         }
 
         function gameLoop(timestamp) {
-            const deltaTime = (timestamp - lastTimestamp) / 1000;
+            const deltaTime = Math.min((timestamp - lastTimestamp) / 1000, 0.1); // Cap deltaTime to prevent large jumps
             lastTimestamp = timestamp;
             updateGameState(deltaTime);
             renderScene();
@@ -992,7 +1015,8 @@
         }
 
         function addDamagePopup(x, y, damage) {
-            popups.push({ text: `-${damage}`, x, y, life: 1, maxLife: 1, isDamage: true });
+            const roundedDamage = damage.toFixed(2);
+            popups.push({ text: `-${roundedDamage}`, x, y, life: 1, maxLife: 1, isDamage: true });
         }
 
         function addExplosion(x, y, isPlayer) {
@@ -1003,7 +1027,7 @@
             player.health = Math.floor(player.maxHealth / 2);
             player.x = 1;
             player.y = 1;
-            alert("You died! Respawned with half health.");
+            showNotification("You died! Respawned with half health.");
             createParticles(player.x, player.y, 20, 'purple', 2, 0.5);
             updateInfo();
         }
@@ -1020,13 +1044,13 @@
             currentTileSet = tileSets[(stage - 1) % tileSets.length];
             createParticles(player.x, player.y, 30, 'green', 3, 0.7);
             updateInfo();
-            alert(`Welcome to Stage ${stage}!`);
+            showNotification(`Welcome to Stage ${stage}!`);
             startCountdown();
         }
 
         function updateInfo() {
             document.getElementById('stage').innerText = `Stage: ${stage}`;
-            document.getElementById('health').innerText = `Health: ${player.health}/${player.maxHealth}`;
+            document.getElementById('health').innerText = `Health: ${Math.floor(player.health)}/${player.maxHealth}`;
             document.getElementById('level').innerText = `Level: ${player.level}`;
             document.getElementById('xp').innerText = `XP: ${player.xp}/${player.xpToNext}`;
         }
@@ -1041,7 +1065,7 @@
                 return true;
             } else if (dy === 0) {
                 const x1 = Math.min(enemy.x, player.x);
-                const x2 = Math.max(enemy.x, player.x);
+                const x2 = Math.max(enemy.x, player.x);  // Fixed typo: Max.max -> Math.max
                 for (let x = x1 + 1; x < x2; x++) if (currentMap[enemy.y][x] === 1) return false;
                 return true;
             }
@@ -1075,9 +1099,7 @@
                 li.textContent = item.name || item.type;
                 li.draggable = true;
                 li.setAttribute('data-index', index);
-                li.addEventListener('dragstart', (e) => {
-                    e.dataTransfer.setData('text/plain', index);
-                });
+                li.addEventListener('dragstart', (e) => e.dataTransfer.setData('text/plain', index));
                 const useButton = document.createElement('button');
                 useButton.textContent = 'Use';
                 useButton.addEventListener('click', () => useItem(index));
@@ -1109,14 +1131,9 @@
         }
 
         const quickSlots = document.querySelectorAll('.quickSlot');
-        quickSlots.forEach((slot) => {
-            slot.addEventListener('click', () => {
-                const slotIndex = parseInt(slot.getAttribute('data-slot'), 10);
-                useQuickAccessItem(slotIndex);
-            });
-            slot.addEventListener('dragover', (e) => {
-                e.preventDefault();
-            });
+        quickSlots.forEach(slot => {
+            slot.addEventListener('click', () => useQuickAccessItem(parseInt(slot.getAttribute('data-slot'), 10)));
+            slot.addEventListener('dragover', (e) => e.preventDefault());
             slot.addEventListener('drop', (e) => {
                 e.preventDefault();
                 const index = e.dataTransfer.getData('text/plain');
@@ -1135,8 +1152,7 @@
             quickSlots.forEach(slot => {
                 const slotIndex = parseInt(slot.getAttribute('data-slot'), 10);
                 const item = player.quickAccess[slotIndex];
-                const itemSpan = slot.querySelector('.item');
-                itemSpan.textContent = item ? item.symbol : '';
+                slot.querySelector('.item').textContent = item ? item.symbol : '';
             });
         }
 
@@ -1157,14 +1173,9 @@
         }
 
         const weaponSlots = document.querySelectorAll('.weaponSlot');
-        weaponSlots.forEach((slot) => {
-            slot.addEventListener('click', () => {
-                const slotIndex = parseInt(slot.getAttribute('data-slot'), 10);
-                equipWeaponFromQuickAccess(slotIndex);
-            });
-            slot.addEventListener('dragover', (e) => {
-                e.preventDefault();
-            });
+        weaponSlots.forEach(slot => {
+            slot.addEventListener('click', () => equipWeaponFromQuickAccess(parseInt(slot.getAttribute('data-slot'), 10)));
+            slot.addEventListener('dragover', (e) => e.preventDefault());
             slot.addEventListener('drop', (e) => {
                 e.preventDefault();
                 const index = e.dataTransfer.getData('text/plain');
@@ -1183,8 +1194,7 @@
             weaponSlots.forEach(slot => {
                 const slotIndex = parseInt(slot.getAttribute('data-slot'), 10);
                 const item = player.weaponQuickAccess[slotIndex];
-                const itemSpan = slot.querySelector('.item');
-                itemSpan.textContent = item ? item.symbol : '';
+                slot.querySelector('.item').textContent = item ? item.symbol : '';
             });
         }
 
@@ -1197,6 +1207,13 @@
                 updateInventoryDisplay();
                 updateWeaponQuickAccessDisplay();
             }
+        }
+
+        function showNotification(message) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.style.display = 'block';
+            setTimeout(() => notification.style.display = 'none', 2000);
         }
 
         document.getElementById('moveUp').addEventListener('pointerdown', () => movingUp = true);
@@ -1212,24 +1229,76 @@
             movingUp = movingLeft = movingRight = movingDown = false;
         });
 
-        document.getElementById('fireUp').addEventListener('click', () => {
+        document.getElementById('fireUp').addEventListener('pointerdown', (e) => {
+            e.preventDefault();
             if (player.fireCooldown <= 0) {
-                fireArrow(player.x, player.y, 0, -1);
+                player.charging.up = true;
+                player.chargeStartTime.up = performance.now();
             }
         });
-        document.getElementById('fireLeft').addEventListener('click', () => {
-            if (player.fireCooldown <= 0) {
-                fireArrow(player.x, player.y, -1, 0);
+        document.getElementById('fireUp').addEventListener('pointerup', (e) => {
+            e.preventDefault();
+            if (player.charging.up) {
+                const chargeTime = (performance.now() - player.chargeStartTime.up) / 1000;
+                const multiplier = Math.min(3, 1 + chargeTime);
+                const damage = (player.attack + (player.equippedWeapon ? player.equippedWeapon.attack : 0)) * multiplier;
+                fireArrow(player.x, player.y, 0, -1, true, damage);
+                player.charging.up = false;
+                player.fireCooldown = player.equippedWeapon ? player.equippedWeapon.fireRate : 0.5;
             }
         });
-        document.getElementById('fireRight').addEventListener('click', () => {
+        document.getElementById('fireLeft').addEventListener('pointerdown', (e) => {
+            e.preventDefault();
             if (player.fireCooldown <= 0) {
-                fireArrow(player.x, player.y, 1, 0);
+                player.charging.left = true;
+                player.chargeStartTime.left = performance.now();
             }
         });
-        document.getElementById('fireDown').addEventListener('click', () => {
+        document.getElementById('fireLeft').addEventListener('pointerup', (e) => {
+            e.preventDefault();
+            if (player.charging.left) {
+                const chargeTime = (performance.now() - player.chargeStartTime.left) / 1000;
+                const multiplier = Math.min(3, 1 + chargeTime);
+                const damage = (player.attack + (player.equippedWeapon ? player.equippedWeapon.attack : 0)) * multiplier;
+                fireArrow(player.x, player.y, -1, 0, true, damage);
+                player.charging.left = false;
+                player.fireCooldown = player.equippedWeapon ? player.equippedWeapon.fireRate : 0.5;
+            }
+        });
+        document.getElementById('fireRight').addEventListener('pointerdown', (e) => {
+            e.preventDefault();
             if (player.fireCooldown <= 0) {
-                fireArrow(player.x, player.y, 0, 1);
+                player.charging.right = true;
+                player.chargeStartTime.right = performance.now();
+            }
+        });
+        document.getElementById('fireRight').addEventListener('pointerup', (e) => {
+            e.preventDefault();
+            if (player.charging.right) {
+                const chargeTime = (performance.now() - player.chargeStartTime.right) / 1000;
+                const multiplier = Math.min(3, 1 + chargeTime);
+                const damage = (player.attack + (player.equippedWeapon ? player.equippedWeapon.attack : 0)) * multiplier;
+                fireArrow(player.x, player.y, 1, 0, true, damage);
+                player.charging.right = false;
+                player.fireCooldown = player.equippedWeapon ? player.equippedWeapon.fireRate : 0.5;
+            }
+        });
+        document.getElementById('fireDown').addEventListener('pointerdown', (e) => {
+            e.preventDefault();
+            if (player.fireCooldown <= 0) {
+                player.charging.down = true;
+                player.chargeStartTime.down = performance.now();
+            }
+        });
+        document.getElementById('fireDown').addEventListener('pointerup', (e) => {
+            e.preventDefault();
+            if (player.charging.down) {
+                const chargeTime = (performance.now() - player.chargeStartTime.down) / 1000;
+                const multiplier = Math.min(3, 1 + chargeTime);
+                const damage = (player.attack + (player.equippedWeapon ? player.equippedWeapon.attack : 0)) * multiplier;
+                fireArrow(player.x, player.y, 0, 1, true, damage);
+                player.charging.down = false;
+                player.fireCooldown = player.equippedWeapon ? player.equippedWeapon.fireRate : 0.5;
             }
         });
 
@@ -1238,30 +1307,24 @@
             if (e.key === 'a') movingLeft = true;
             if (e.key === 's') movingDown = true;
             if (e.key === 'd') movingRight = true;
-            if (e.key === 'ArrowUp' && !firingUpPressed && player.fireCooldown <= 0) {
-                fireArrow(player.x, player.y, 0, -1);
-                firingUpPressed = true;
+            if (e.key === 'ArrowUp' && player.fireCooldown <= 0) {
+                player.charging.up = true;
+                player.chargeStartTime.up = performance.now();
             }
-            if (e.key === 'ArrowLeft' && !firingLeftPressed && player.fireCooldown <= 0) {
-                fireArrow(player.x, player.y, -1, 0);
-                firingLeftPressed = true;
+            if (e.key === 'ArrowLeft' && player.fireCooldown <= 0) {
+                player.charging.left = true;
+                player.chargeStartTime.left = performance.now();
             }
-            if (e.key === 'ArrowRight' && !firingRightPressed && player.fireCooldown <= 0) {
-                fireArrow(player.x, player.y, 1, 0);
-                firingRightPressed = true;
+            if (e.key === 'ArrowRight' && player.fireCooldown <= 0) {
+                player.charging.right = true;
+                player.chargeStartTime.right = performance.now();
             }
-            if (e.key === 'ArrowDown' && !firingDownPressed && player.fireCooldown <= 0) {
-                fireArrow(player.x, player.y, 0, 1);
-                firingDownPressed = true;
+            if (e.key === 'ArrowDown' && player.fireCooldown <= 0) {
+                player.charging.down = true;
+                player.chargeStartTime.down = performance.now();
             }
-            if (e.key >= '1' && e.key <= '5') {
-                const slotIndex = parseInt(e.key) - 1;
-                useQuickAccessItem(slotIndex);
-            }
-            if (e.key >= '6' && e.key <= '8') {
-                const slotIndex = parseInt(e.key) - 6;
-                equipWeaponFromQuickAccess(slotIndex);
-            }
+            if (e.key >= '1' && e.key <= '5') useQuickAccessItem(parseInt(e.key) - 1);
+            if (e.key >= '6' && e.key <= '8') equipWeaponFromQuickAccess(parseInt(e.key) - 6);
         });
 
         document.addEventListener('keyup', (e) => {
@@ -1269,16 +1332,44 @@
             if (e.key === 'a') movingLeft = false;
             if (e.key === 's') movingDown = false;
             if (e.key === 'd') movingRight = false;
-            if (e.key === 'ArrowUp') firingUpPressed = false;
-            if (e.key === 'ArrowLeft') firingLeftPressed = false;
-            if (e.key === 'ArrowRight') firingRightPressed = false;
-            if (e.key === 'ArrowDown') firingDownPressed = false;
+            if (e.key === 'ArrowUp' && player.charging.up) {
+                const chargeTime = (performance.now() - player.chargeStartTime.up) / 1000;
+                const multiplier = Math.min(3, 1 + chargeTime);
+                const damage = (player.attack + (player.equippedWeapon ? player.equippedWeapon.attack : 0)) * multiplier;
+                fireArrow(player.x, player.y, 0, -1, true, damage);
+                player.charging.up = false;
+                player.fireCooldown = player.equippedWeapon ? player.equippedWeapon.fireRate : 0.5;
+            }
+            if (e.key === 'ArrowLeft' && player.charging.left) {
+                const chargeTime = (performance.now() - player.chargeStartTime.left) / 1000;
+                const multiplier = Math.min(3, 1 + chargeTime);
+                const damage = (player.attack + (player.equippedWeapon ? player.equippedWeapon.attack : 0)) * multiplier;
+                fireArrow(player.x, player.y, -1, 0, true, damage);
+                player.charging.left = false;
+                player.fireCooldown = player.equippedWeapon ? player.equippedWeapon.fireRate : 0.5;
+            }
+            if (e.key === 'ArrowRight' && player.charging.right) {
+                const chargeTime = (performance.now() - player.chargeStartTime.right) / 1000;
+                const multiplier = Math.min(3, 1 + chargeTime);
+                const damage = (player.attack + (player.equippedWeapon ? player.equippedWeapon.attack : 0)) * multiplier;
+                fireArrow(player.x, player.y, 1, 0, true, damage);
+                player.charging.right = false;
+                player.fireCooldown = player.equippedWeapon ? player.equippedWeapon.fireRate : 0.5;
+            }
+            if (e.key === 'ArrowDown' && player.charging.down) {
+                const chargeTime = (performance.now() - player.chargeStartTime.down) / 1000;
+                const multiplier = Math.min(3, 1 + chargeTime);
+                const damage = (player.attack + (player.equippedWeapon ? player.equippedWeapon.attack : 0)) * multiplier;
+                fireArrow(player.x, player.y, 0, 1, true, damage);
+                player.charging.down = false;
+                player.fireCooldown = player.equippedWeapon ? player.equippedWeapon.fireRate : 0.5;
+            }
         });
 
         document.getElementById('toggleInventory').addEventListener('click', () => {
             const inventoryDiv = document.getElementById('inventory');
             inventoryDiv.style.display = inventoryDiv.style.display === 'none' ? 'block' : 'none';
-            updateInventoryDisplay();
+            if (inventoryDiv.style.display === 'block') updateInventoryDisplay();
         });
 
         startCountdown();
