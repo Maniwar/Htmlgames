@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dungeon Crawler - More Loot Drops</title>
+    <title>Dungeon Crawler - Fixed Player Graphic and Enemy Loot</title>
     <style>
         body {
             margin: 0;
@@ -162,7 +162,7 @@
         let movingUp = false, movingLeft = false, movingRight = false, movingDown = false;
         let exitUnlocked = false;
         let lastTimestamp = 0;
-        let hasDroppedThisStage = false; // Track if loot has dropped in the current stage
+        let hasDroppedThisStage = false;
 
         // Rare Loot Definitions
         const rareWeapons = [
@@ -334,7 +334,7 @@
                 ctx.fillStyle = 'green';
                 ctx.fillRect(renderX * cellSize + (cellSize - healthBarWidth) / 2, renderY * cellSize - 10, healthBarWidth * healthRatio, healthBarHeight);
             });
-            ctx.fillText(" броня", player.x * cellSize + cellSize / 2, player.y * cellSize + cellSize / 2);
+            ctx.fillText("🧍", player.x * cellSize + cellSize / 2, player.y * cellSize + cellSize / 2); // Fixed player graphic
             const healthBarWidth = 30;
             const healthBarHeight = 5;
             const healthRatio = player.health / player.maxHealth;
@@ -447,7 +447,6 @@
             const roll = Math.random();
             const isLastEnemy = enemies.length === 1;
 
-            // 50% base chance to drop an item, guaranteed if last enemy and no drops yet
             if (roll < 0.5 || (isLastEnemy && !hasDroppedThisStage)) {
                 let typeRoll = Math.random();
                 let type;
@@ -459,7 +458,6 @@
                 hasDroppedThisStage = true;
             }
 
-            // 20% chance for a second drop
             if (Math.random() < 0.2) {
                 let typeRoll = Math.random();
                 let type;
@@ -571,11 +569,7 @@
                         if (newX >= 0 && newX < mapSize && newY >= 0 && newY < mapSize && currentMap[newY][newX] === 0) {
                             enemy.x = newX;
                             enemy.y = newY;
-                            const lootIndex = loot.findIndex(item => item.x === enemy.x && item.y === enemy.y);
-                            if (lootIndex >= 0) {
-                                loot[lootIndex].effect(enemy);
-                                loot.splice(lootIndex, 1);
-                            }
+                            // Removed loot pickup logic for enemies
                         }
                         enemy.moveCooldown = enemy.moveSpeed;
                     }
@@ -678,7 +672,7 @@
             enemies = generateEnemies(stage);
             loot = generateLoot();
             exitUnlocked = false;
-            hasDroppedThisStage = false; // Reset for new stage
+            hasDroppedThisStage = false;
             updateInfo();
             alert(`Welcome to Stage ${stage}!`);
         }
