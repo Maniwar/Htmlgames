@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dungeon Crawler - Mage Player Graphic</title>
+    <title>Dungeon Crawler - Mage Quest</title>
     <style>
         body {
             margin: 0;
@@ -13,6 +13,7 @@
             align-items: center;
             min-height: 100vh;
             background-color: #f0f0f0;
+            transition: background-color 1s;
         }
         #gameContainer {
             display: flex;
@@ -55,12 +56,15 @@
             text-align: center;
             margin-bottom: 10px;
             font-family: Arial, sans-serif;
+            color: #fff;
+            text-shadow: 0 0 5px #000;
         }
         #inventory {
             border: 1px solid gray;
             padding: 10px;
             display: none;
             margin-top: 10px;
+            background: rgba(255, 255, 255, 0.8);
         }
         #inventoryList {
             list-style-type: none;
@@ -88,9 +92,11 @@
             align-items: center;
             background-color: #eee;
             cursor: pointer;
+            transition: transform 0.2s;
         }
         .quickSlot:hover {
             background-color: #ddd;
+            transform: scale(1.1);
         }
     </style>
 </head>
@@ -159,18 +165,20 @@
         let loot = generateLoot();
         let arrows = [];
         let popups = [];
+        let particles = []; // New array for particle effects
         let movingUp = false, movingLeft = false, movingRight = false, movingDown = false;
         let exitUnlocked = false;
         let lastTimestamp = 0;
         let hasDroppedThisStage = false;
+        let pulseTime = 0; // For pulsing effects
 
         // Rare Loot Definitions
         const rareWeapons = [
             { type: 'weapon', name: 'Bow', attack: 15, fireRate: 0.5, symbol: '🏹', spread: false, isAoE: false },
             { type: 'weapon', name: 'Crossbow', attack: 20, fireRate: 0.3, symbol: '🏹', spread: false, isAoE: false },
             { type: 'weapon', name: 'Shotgun', attack: 10, fireRate: 0.7, symbol: '🔫', spread: true, isAoE: false },
-            { type: 'weapon', name: 'Grenade Launcher', attack: 25, fireRate: 0.8, symbol: '💣', spread: false, isAoE: true },
-            { type: 'weapon', name: 'Sniper Rifle', attack: 40, fireRate: 0.8, symbol: '🔫', spread: false, isAoE: false },
+            { type: 'weapon', name: 'Grenade Launcher', attack: 25, fireRate: 1.0, symbol: '💣', spread: false, isAoE: true },
+            { type: 'weapon', name: 'Sniper Rifle', attack: 40, fireRate: 1.5, symbol: '🔫', spread: false, isAoE: false },
             { type: 'weapon', name: 'Machine Gun', attack: 5, fireRate: 0.1, symbol: '🔫', spread: false, isAoE: false }
         ];
         const rareArmor = [
@@ -302,9 +310,50 @@
             target.y = y;
         }
 
+        // Particle System
+        function createParticles(x, y, count, color, speed, life) {
+            for (let i = 0; i < count; i++) {
+                const angle = Math.random() * Math.PI * 2;
+                const velocity = (Math.random() * speed) + 1;
+                particles.push({
+                    x: x * cellSize + cellSize / 2,
+                    y: y * cellSize + cellSize / 2,
+                    dx: Math.cos(angle) * velocity,
+                    dy: Math.sin(angle) * velocity,
+                    life: life,
+                    maxLife: life,
+                    color: color
+                });
+            }
+        }
+
+        function updateParticles(deltaTime) {
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.x += p.dx * deltaTime * 60;
+                p.y += p.dy * deltaTime * 60;
+                p.life -= deltaTime;
+                if (p.life <= 0) particles.splice(i, 1);
+            }
+        }
+
+        function drawParticles() {
+            particles.forEach(p => {
+                ctx.globalAlpha = p.life / p.maxLife;
+                ctx.fillStyle = p.color;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+                ctx.fill();
+            });
+            ctx.globalAlpha = 1;
+        }
+
         // Drawing Functions
         function drawMap() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
+            pulseTime += 0.02;
+            document.body.style.backgroundColor = `hsl(${stage * 10}, 50%, ${50 + Math.sin(pulseTime) * 10}%)`;
+
             ctx.font = "30px Arial";
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
@@ -317,7 +366,16 @@
                     );
                 }
             }
-            loot.forEach(item => ctx.fillText(item.symbol, item.x * cellSize + cellSize / 2, item.y * cellSize + cellSize / 2));
+
+            loot.forEach(item => {
+                ctx.save();
+                ctx.translate(item.x * cellSize + cellSize / 2, item.y * cellSize + cellSize / 2);
+                ctx.scale(1 + Math.sin(pulseTime * 2) * 0.1, 1 + Math.sin(pulseTime * 2) * 0.1);
+                ctx.fillStyle = `hsl(${pulseTime * 100 % 360}, 100%, 70%)`;
+                ctx.fillText(item.symbol, 0, 0);
+                ctx.restore();
+            });
+
             enemies.forEach(enemy => {
                 const renderX = enemy.bounceTimer > 0 ? 
                     enemy.x + (enemy.bounceTargetX - enemy.x) * (1 - enemy.bounceTimer / 0.2) : 
@@ -331,10 +389,22 @@
                 const healthRatio = enemy.health / enemy.maxHealth;
                 ctx.fillStyle = 'red';
                 ctx.fillRect(renderX * cellSize + (cellSize - healthBarWidth) / 2, renderY * cellSize - 10, healthBarWidth, healthBarHeight);
-                ctx.fillStyle = 'green';
+                ctx.fillStyle = `hsl(120, 100%, ${50 + Math.sin(pulseTime * 5) * 20}%)`;
                 ctx.fillRect(renderX * cellSize + (cellSize - healthBarWidth) / 2, renderY * cellSize - 10, healthBarWidth * healthRatio, healthBarHeight);
             });
-            ctx.fillText("🧙", player.x * cellSize + cellSize / 2, player.y * cellSize + cellSize / 2);
+
+            ctx.save();
+            ctx.translate(player.x * cellSize + cellSize / 2, player.y * cellSize + cellSize / 2);
+            if (player.shieldTimer > 0) {
+                ctx.strokeStyle = `hsl(240, 100%, ${50 + Math.sin(pulseTime * 3) * 20}%)`;
+                ctx.lineWidth = 2 + Math.sin(pulseTime * 2);
+                ctx.beginPath();
+                ctx.arc(0, 0, 20 + Math.sin(pulseTime) * 2, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+            ctx.fillText("🧙", 0, 0);
+            ctx.restore();
+
             const healthBarWidth = 30;
             const healthBarHeight = 5;
             const healthRatio = player.health / player.maxHealth;
@@ -343,16 +413,10 @@
             ctx.fillStyle = 'green';
             ctx.fillRect(player.x * cellSize + (cellSize - healthBarWidth) / 2, player.y * cellSize - 10, healthBarWidth * healthRatio, healthBarHeight);
 
-            if (player.shieldTimer > 0) {
-                ctx.strokeStyle = 'blue';
-                ctx.lineWidth = 2;
-                ctx.beginPath();
-                ctx.arc(player.x * cellSize + cellSize / 2, player.y * cellSize + cellSize / 2, 20, 0, 2 * Math.PI);
-                ctx.stroke();
-            }
             if (player.speedBoostTimer > 0) {
                 player.trail.forEach((pos, i) => {
-                    ctx.globalAlpha = 0.1 * (3 - i);
+                    ctx.globalAlpha = 0.3 * (3 - i);
+                    ctx.fillStyle = `hsl(${i * 60 + pulseTime * 100 % 360}, 100%, 50%)`;
                     ctx.fillText("🧙", pos.x * cellSize + cellSize / 2, pos.y * cellSize + cellSize / 2);
                 });
                 ctx.globalAlpha = 1;
@@ -361,23 +425,36 @@
 
         function drawArrows() {
             arrows.forEach(arrow => {
-                ctx.strokeStyle = arrow.isPlayer ? (player.megaDamageTimer > 0 ? 'purple' : 'blue') : 'red';
-                ctx.lineWidth = player.megaDamageTimer > 0 ? 4 : 2;
+                ctx.strokeStyle = arrow.isPlayer ? (player.megaDamageTimer > 0 ? `hsl(300, 100%, ${50 + Math.sin(pulseTime * 5) * 20}%)` : 'blue') : 'red';
+                ctx.lineWidth = player.megaDamageTimer > 0 && arrow.isPlayer ? 4 + Math.sin(pulseTime * 2) : 2;
                 ctx.beginPath();
                 ctx.moveTo(arrow.x * cellSize, arrow.y * cellSize);
                 ctx.lineTo((arrow.x + arrow.dx * 0.5) * cellSize, (arrow.y + arrow.dy * 0.5) * cellSize);
                 ctx.stroke();
+
+                // Arrow trail
+                ctx.globalAlpha = 0.5;
+                ctx.fillStyle = arrow.isPlayer ? 'cyan' : 'orange';
+                ctx.beginPath();
+                ctx.arc(arrow.x * cellSize, arrow.y * cellSize, 2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1;
             });
         }
 
         function drawPopups() {
-            popups.forEach(popup => {
-                ctx.globalAlpha = popup.timeToLive / 1;
+            popups.forEach(p => {
+                ctx.globalAlpha = p.life / p.maxLife;
                 ctx.fillStyle = 'yellow';
-                ctx.font = '16px Arial';
-                ctx.fillText(popup.text, popup.x * cellSize + cellSize / 2, popup.y * cellSize + cellSize / 2);
-                ctx.globalAlpha = 1;
+                ctx.font = `16px Arial`;
+                const scale = 1 + Math.sin(pulseTime * 5) * 0.2;
+                ctx.save();
+                ctx.translate(p.x * cellSize + cellSize / 2, p.y * cellSize + cellSize / 2 - (1 - p.life / p.maxLife) * 20);
+                ctx.scale(scale, scale);
+                ctx.fillText(p.text, 0, 0);
+                ctx.restore();
             });
+            ctx.globalAlpha = 1;
         }
 
         // Game Logic
@@ -405,6 +482,7 @@
                         player.inventory.push(item);
                     }
                     loot.splice(lootIndex, 1);
+                    createParticles(player.x, player.y, 10, 'gold', 2, 0.5); // Pickup particles
                     updateQuickAccessDisplay();
                     updateInventoryDisplay();
                 }
@@ -414,8 +492,8 @@
 
         function fireArrow(x, y, dx, dy, isPlayer = true) {
             const weaponBonus = player.equippedWeapon ? player.equippedWeapon.attack : 0;
-            const baseDamage = isPlayer ? player.attack : 5; // Use player.attack as base damage
-            const damage = (player.megaDamageTimer > 0 ? (baseDamage + weaponBonus) * 2 : (baseDamage + weaponBonus));
+            const baseDamage = isPlayer ? player.attack : 5;
+            const damage = (player.megaDamageTimer > 0 && isPlayer ? (baseDamage + weaponBonus) * 2 : (baseDamage + weaponBonus));
             const arrow = { 
                 x: x + 0.5, 
                 y: y + 0.5, 
@@ -425,15 +503,15 @@
                 damage, 
                 isAoE: player.equippedWeapon ? player.equippedWeapon.isAoE : false 
             };
-            if (player.equippedWeapon && player.equippedWeapon.spread) {
+            if (player.equippedWeapon && player.equippedWeapon.spread && isPlayer) {
                 arrows.push({ ...arrow, dx: dx + 0.1 });
                 arrows.push({ ...arrow, dx: dx - 0.1 });
             }
             arrows.push(arrow);
-            if (player.doubleArrowTimer > 0) {
+            if (player.doubleArrowTimer > 0 && isPlayer) {
                 arrows.push({ ...arrow, x: x + 0.5 + (dx * 0.1), y: y + 0.5 + (dy * 0.1) });
             }
-            player.fireCooldown = player.equippedWeapon ? player.equippedWeapon.fireRate : 0.5;
+            if (isPlayer) player.fireCooldown = player.equippedWeapon ? player.equippedWeapon.fireRate : 0.5;
         }
 
         function applyKnockback(target, dx, dy, distance = 1) {
@@ -500,6 +578,7 @@
                                     player.xp += 50;
                                     checkLevelUp();
                                     updateInfo();
+                                    createParticles(enemy.x, enemy.y, 20, 'red', 3, 0.5); // Death particles
                                     dropLoot(enemy.x, enemy.y);
                                     enemies.splice(i, 1);
                                     i--;
@@ -521,6 +600,7 @@
                 player.health = player.maxHealth;
                 player.attack += 5;
                 alert(`Level Up! You are now Level ${player.level}. Max Health: ${player.maxHealth}, Attack: ${player.attack}`);
+                createParticles(player.x, player.y, 30, 'gold', 2, 1); // Level-up particles
                 updateInfo();
             }
         }
@@ -551,6 +631,7 @@
 
             if (player.healthRegenTimer > 0) {
                 player.health = Math.min(player.maxHealth, player.health + 1);
+                createParticles(player.x, player.y, 5, 'lime', 1, 0.3); // Regen particles
                 updateInfo();
             }
 
@@ -611,6 +692,7 @@
                     if (arrow.isAoE) {
                         applyAoEDamage(cellX, cellY, arrow.damage);
                     }
+                    createParticles(cellX, cellY, 10, arrow.isPlayer ? 'blue' : 'red', 2, 0.3); // Wall hit particles
                     arrows.splice(i, 1);
                 } else if (arrow.isPlayer) {
                     for (let j = 0; j < enemies.length; j++) {
@@ -625,11 +707,13 @@
                                     const dy = enemy.y - player.y;
                                     applyKnockback(enemy, dx, dy, 2);
                                     addDamagePopup(enemy.x, enemy.y, arrow.damage);
+                                    createParticles(enemy.x, enemy.y, 15, 'orange', 2, 0.4); // Hit particles
                                 }
                                 if (enemy.health <= 0) {
                                     player.xp += 50;
                                     checkLevelUp();
                                     updateInfo();
+                                    createParticles(enemy.x, enemy.y, 20, 'red', 3, 0.5); // Death particles
                                     dropLoot(enemy.x, enemy.y);
                                     enemies.splice(j, 1);
                                     j--;
@@ -641,28 +725,39 @@
                         }
                     }
                 } else if (cellX === player.x && cellY === player.y) {
-                    if (player.shieldTimer <= 0) {
+                    if (player.shieldTimer > 0) {
+                        arrow.dx = -arrow.dx;
+                        arrow.dy = -arrow.dy;
+                        arrow.isPlayer = false;
+                        createParticles(player.x, player.y, 10, 'blue', 2, 0.3); // Deflection particles
+                        fireArrow(player.x, player.y, 0, -1, true);
+                        fireArrow(player.x, player.y, 0, 1, true);
+                        fireArrow(player.x, player.y, -1, 0, true);
+                        fireArrow(player.x, player.y, 1, 0, true);
+                    } else {
                         const damage = arrow.damage - (player.equippedArmor ? player.equippedArmor.defense : 0);
                         player.health -= Math.max(damage, 0);
                         applyKnockback(player, -arrow.dx, -arrow.dy, 1);
                         addDamagePopup(player.x, player.y, Math.max(damage, 0));
+                        createParticles(player.x, player.y, 10, 'red', 2, 0.3); // Damage particles
+                        if (player.health <= 0) gameOver();
+                        arrows.splice(i, 1);
                     }
-                    addExplosion(cellX, cellY, false);
-                    if (player.health <= 0) gameOver();
-                    arrows.splice(i, 1);
                     updateInfo();
                 }
             }
 
+            updateParticles(deltaTime);
             for (let i = popups.length - 1; i >= 0; i--) {
-                popups[i].timeToLive -= deltaTime;
-                if (popups[i].timeToLive <= 0) popups.splice(i, 1);
+                popups[i].life -= deltaTime;
+                if (popups[i].life <= 0) popups.splice(i, 1);
             }
         }
 
         function renderScene() {
             drawMap();
             drawArrows();
+            drawParticles();
             drawPopups();
         }
 
@@ -676,11 +771,11 @@
 
         // Helper Functions
         function addDamagePopup(x, y, damage) {
-            popups.push({ text: `-${damage}`, x, y, timeToLive: 1, isDamage: true });
+            popups.push({ text: `-${damage}`, x, y, life: 1, maxLife: 1, isDamage: true });
         }
 
         function addExplosion(x, y, isPlayer) {
-            popups.push({ text: '💥', x, y, timeToLive: 0.5, isDamage: false });
+            popups.push({ text: '💥', x, y, life: 0.5, maxLife: 0.5, isDamage: false });
         }
 
         function gameOver() {
@@ -688,6 +783,7 @@
             player.x = 1;
             player.y = 1;
             alert("You died! Respawned with half health.");
+            createParticles(player.x, player.y, 20, 'purple', 2, 0.5); // Respawn particles
             updateInfo();
         }
 
@@ -700,6 +796,7 @@
             loot = generateLoot();
             exitUnlocked = false;
             hasDroppedThisStage = false;
+            createParticles(player.x, player.y, 30, 'green', 3, 0.7); // Stage advance particles
             updateInfo();
             alert(`Welcome to Stage ${stage}!`);
         }
