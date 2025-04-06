@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dungeon Crawler - Fixed Bounce Animation</title>
+    <title>Dungeon Crawler - More Loot Drops</title>
     <style>
         body {
             margin: 0;
@@ -162,6 +162,7 @@
         let movingUp = false, movingLeft = false, movingRight = false, movingDown = false;
         let exitUnlocked = false;
         let lastTimestamp = 0;
+        let hasDroppedThisStage = false; // Track if loot has dropped in the current stage
 
         // Rare Loot Definitions
         const rareWeapons = [
@@ -333,7 +334,7 @@
                 ctx.fillStyle = 'green';
                 ctx.fillRect(renderX * cellSize + (cellSize - healthBarWidth) / 2, renderY * cellSize - 10, healthBarWidth * healthRatio, healthBarHeight);
             });
-            ctx.fillText("🧍", player.x * cellSize + cellSize / 2, player.y * cellSize + cellSize / 2);
+            ctx.fillText(" броня", player.x * cellSize + cellSize / 2, player.y * cellSize + cellSize / 2);
             const healthBarWidth = 30;
             const healthBarHeight = 5;
             const healthRatio = player.health / player.maxHealth;
@@ -428,17 +429,48 @@
 
         function applyKnockback(target, dx, dy, distance = 1) {
             const magnitude = Math.sqrt(dx * dx + dy * dy);
-            if (magnitude === 0) return; // Avoid division by zero
+            if (magnitude === 0) return;
             const unitDx = dx / magnitude;
             const unitDy = dy / magnitude;
             target.bounceTargetX = Math.round(target.x + unitDx * distance);
             target.bounceTargetY = Math.round(target.y + unitDy * distance);
             if (target.bounceTargetX >= 0 && target.bounceTargetX < mapSize && target.bounceTargetY >= 0 && target.bounceTargetY < mapSize && currentMap[target.bounceTargetY][target.bounceTargetX] === 0) {
-                target.bounceTimer = 0.2; // Animation duration in seconds
+                target.bounceTimer = 0.2;
             } else {
                 target.bounceTargetX = target.x;
                 target.bounceTargetY = target.y;
             }
+        }
+
+        function dropLoot(x, y) {
+            let drops = [];
+            const roll = Math.random();
+            const isLastEnemy = enemies.length === 1;
+
+            // 50% base chance to drop an item, guaranteed if last enemy and no drops yet
+            if (roll < 0.5 || (isLastEnemy && !hasDroppedThisStage)) {
+                let typeRoll = Math.random();
+                let type;
+                if (typeRoll < 0.7) type = rareWeapons; // 70% chance for weapon
+                else if (typeRoll < 0.9) type = rareArmor; // 20% chance for armor
+                else type = rarePotions; // 10% chance for potion
+                const item = type[Math.floor(Math.random() * type.length)];
+                drops.push({ x, y, ...item });
+                hasDroppedThisStage = true;
+            }
+
+            // 20% chance for a second drop
+            if (Math.random() < 0.2) {
+                let typeRoll = Math.random();
+                let type;
+                if (typeRoll < 0.7) type = rareWeapons;
+                else if (typeRoll < 0.9) type = rareArmor;
+                else type = rarePotions;
+                const item = type[Math.floor(Math.random() * type.length)];
+                drops.push({ x, y, ...item });
+            }
+
+            drops.forEach(drop => loot.push(drop));
         }
 
         function applyAoEDamage(centerX, centerY, damage) {
@@ -458,12 +490,7 @@
                                     applyKnockback(enemy, knockDx, knockDy, 1);
                                 }
                                 if (enemy.health <= 0) {
-                                    if (Math.random() < 0.1) {
-                                        const rareLootTypes = [rareWeapons, rareArmor, rarePotions];
-                                        const type = rareLootTypes[Math.floor(Math.random() * rareLootTypes.length)];
-                                        const item = type[Math.floor(Math.random() * type.length)];
-                                        loot.push({ x: enemy.x, y: enemy.y, ...item });
-                                    }
+                                    dropLoot(enemy.x, enemy.y);
                                     enemies.splice(i, 1);
                                     i--;
                                     if (!enemies.length) exitUnlocked = true;
@@ -582,12 +609,7 @@
                                     addDamagePopup(enemy.x, enemy.y, arrow.damage);
                                 }
                                 if (enemy.health <= 0) {
-                                    if (Math.random() < 0.1) {
-                                        const rareLootTypes = [rareWeapons, rareArmor, rarePotions];
-                                        const type = rareLootTypes[Math.floor(Math.random() * rareLootTypes.length)];
-                                        const item = type[Math.floor(Math.random() * type.length)];
-                                        loot.push({ x: enemy.x, y: enemy.y, ...item });
-                                    }
+                                    dropLoot(enemy.x, enemy.y);
                                     enemies.splice(j, 1);
                                     j--;
                                     if (!enemies.length) exitUnlocked = true;
@@ -656,6 +678,7 @@
             enemies = generateEnemies(stage);
             loot = generateLoot();
             exitUnlocked = false;
+            hasDroppedThisStage = false; // Reset for new stage
             updateInfo();
             alert(`Welcome to Stage ${stage}!`);
         }
