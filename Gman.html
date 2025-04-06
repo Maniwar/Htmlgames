@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dungeon Crawler - Enhanced Edition</title>
+    <title>Dungeon Crawler - Fixed Bounce Animation</title>
     <style>
         body {
             margin: 0;
@@ -259,7 +259,8 @@
                 enemyList.push({
                     x, y, health: type.health, maxHealth: type.maxHealth, attack: type.attack, moveCooldown: 0, fireCooldown: 0,
                     type: type.type, fireChance: type.fireChance, moveSpeed: type.moveSpeed, symbol: type.symbol,
-                    speedBoostTimer: 0, megaDamageTimer: 0, shieldTimer: 0
+                    speedBoostTimer: 0, megaDamageTimer: 0, shieldTimer: 0,
+                    renderX: x, renderY: y, bounceTargetX: null, bounceTargetY: null, bounceTimer: 0
                 });
             }
             return enemyList;
@@ -317,14 +318,20 @@
             }
             loot.forEach(item => ctx.fillText(item.symbol, item.x * cellSize + cellSize / 2, item.y * cellSize + cellSize / 2));
             enemies.forEach(enemy => {
-                ctx.fillText(enemy.symbol, enemy.x * cellSize + cellSize / 2, enemy.y * cellSize + cellSize / 2);
+                const renderX = enemy.bounceTimer > 0 ? 
+                    enemy.x + (enemy.bounceTargetX - enemy.x) * (1 - enemy.bounceTimer / 0.2) : 
+                    enemy.x;
+                const renderY = enemy.bounceTimer > 0 ? 
+                    enemy.y + (enemy.bounceTargetY - enemy.y) * (1 - enemy.bounceTimer / 0.2) : 
+                    enemy.y;
+                ctx.fillText(enemy.symbol, renderX * cellSize + cellSize / 2, renderY * cellSize + cellSize / 2);
                 const healthBarWidth = 30;
                 const healthBarHeight = 5;
                 const healthRatio = enemy.health / enemy.maxHealth;
                 ctx.fillStyle = 'red';
-                ctx.fillRect(enemy.x * cellSize + (cellSize - healthBarWidth) / 2, enemy.y * cellSize - 10, healthBarWidth, healthBarHeight);
+                ctx.fillRect(renderX * cellSize + (cellSize - healthBarWidth) / 2, renderY * cellSize - 10, healthBarWidth, healthBarHeight);
                 ctx.fillStyle = 'green';
-                ctx.fillRect(enemy.x * cellSize + (cellSize - healthBarWidth) / 2, enemy.y * cellSize - 10, healthBarWidth * healthRatio, healthBarHeight);
+                ctx.fillRect(renderX * cellSize + (cellSize - healthBarWidth) / 2, renderY * cellSize - 10, healthBarWidth * healthRatio, healthBarHeight);
             });
             ctx.fillText("🧍", player.x * cellSize + cellSize / 2, player.y * cellSize + cellSize / 2);
             const healthBarWidth = 30;
@@ -420,15 +427,17 @@
         }
 
         function applyKnockback(target, dx, dy, distance = 1) {
-            for (let i = 0; i < distance; i++) {
-                const newX = target.x + dx;
-                const newY = target.y + dy;
-                if (newX >= 0 && newX < mapSize && newY >= 0 && newY < mapSize && currentMap[newY][newX] === 0) {
-                    target.x = newX;
-                    target.y = newY;
-                } else {
-                    break;
-                }
+            const magnitude = Math.sqrt(dx * dx + dy * dy);
+            if (magnitude === 0) return; // Avoid division by zero
+            const unitDx = dx / magnitude;
+            const unitDy = dy / magnitude;
+            target.bounceTargetX = Math.round(target.x + unitDx * distance);
+            target.bounceTargetY = Math.round(target.y + unitDy * distance);
+            if (target.bounceTargetX >= 0 && target.bounceTargetX < mapSize && target.bounceTargetY >= 0 && target.bounceTargetY < mapSize && currentMap[target.bounceTargetY][target.bounceTargetX] === 0) {
+                target.bounceTimer = 0.2; // Animation duration in seconds
+            } else {
+                target.bounceTargetX = target.x;
+                target.bounceTargetY = target.y;
             }
         }
 
@@ -443,13 +452,8 @@
                             if (enemy.x === x && enemy.y === y && enemy.shieldTimer <= 0) {
                                 enemy.health -= damage;
                                 addDamagePopup(enemy.x, enemy.y, damage);
-                                let knockDx = 0;
-                                let knockDy = 0;
-                                if (Math.abs(x - centerX) > Math.abs(y - centerY)) {
-                                    knockDx = Math.sign(x - centerX);
-                                } else if (Math.abs(y - centerY) > 0) {
-                                    knockDy = Math.sign(y - centerY);
-                                }
+                                let knockDx = x - centerX;
+                                let knockDy = y - centerY;
                                 if (knockDx !== 0 || knockDy !== 0) {
                                     applyKnockback(enemy, knockDx, knockDy, 1);
                                 }
@@ -516,6 +520,15 @@
                     if (enemy.moveCooldown < 0) enemy.moveCooldown = 0;
                     if (enemy.fireCooldown < 0) enemy.fireCooldown = 0;
 
+                    if (enemy.bounceTimer > 0) {
+                        enemy.bounceTimer -= deltaTime;
+                        if (enemy.bounceTimer <= 0) {
+                            enemy.x = enemy.bounceTargetX;
+                            enemy.y = enemy.bounceTargetY;
+                            enemy.bounceTimer = 0;
+                        }
+                    }
+
                     if (enemy.fireCooldown <= 0 && enemy.fireChance > 0 && Math.random() < enemy.fireChance && isInLineOfSight(enemy) && player.invisibilityTimer <= 0) {
                         const direction = getDirectionToPlayer(enemy);
                         if (direction) {
@@ -563,7 +576,9 @@
                             } else {
                                 if (enemy.shieldTimer <= 0) {
                                     enemy.health -= arrow.damage;
-                                    applyKnockback(enemy, -arrow.dx, -arrow.dy, 2);
+                                    const dx = enemy.x - player.x;
+                                    const dy = enemy.y - player.y;
+                                    applyKnockback(enemy, dx, dy, 2);
                                     addDamagePopup(enemy.x, enemy.y, arrow.damage);
                                 }
                                 if (enemy.health <= 0) {
