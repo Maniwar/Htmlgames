@@ -165,12 +165,23 @@
         let loot = generateLoot();
         let arrows = [];
         let popups = [];
-        let particles = []; // New array for particle effects
+        let particles = [];
         let movingUp = false, movingLeft = false, movingRight = false, movingDown = false;
         let exitUnlocked = false;
         let lastTimestamp = 0;
         let hasDroppedThisStage = false;
-        let pulseTime = 0; // For pulsing effects
+        let pulseTime = 0;
+
+        // **New variables for countdown**
+        let countdownActive = false;
+        let countdownTimer = 0;
+        let countdownText = '';
+
+        // **New variables for keyboard firing control**
+        let firingUpPressed = false;
+        let firingLeftPressed = false;
+        let firingRightPressed = false;
+        let firingDownPressed = false;
 
         // Rare Loot Definitions
         const rareWeapons = [
@@ -348,6 +359,51 @@
             ctx.globalAlpha = 1;
         }
 
+        // **New Countdown Functions**
+        function startCountdown() {
+            countdownActive = true;
+            countdownTimer = 3.5; // Total duration in seconds
+            countdownText = '3';
+            createParticles(mapSize / 2, mapSize / 2, 50, 'red', 2, 1); // Center particles for '3'
+        }
+
+        function updateCountdown(deltaTime) {
+            countdownTimer -= deltaTime;
+            if (countdownTimer <= 0) {
+                countdownActive = false;
+                countdownText = '';
+            } else if (countdownTimer <= 0.5) {
+                if (countdownText !== 'GO!') {
+                    countdownText = 'GO!';
+                    createParticles(mapSize / 2, mapSize / 2, 50, 'blue', 3, 1); // Particles for 'GO!'
+                }
+            } else if (countdownTimer <= 1.5) {
+                if (countdownText !== '1') {
+                    countdownText = '1';
+                    createParticles(mapSize / 2, mapSize / 2, 50, 'green', 2, 1); // Particles for '1'
+                }
+            } else if (countdownTimer <= 2.5) {
+                if (countdownText !== '2') {
+                    countdownText = '2';
+                    createParticles(mapSize / 2, mapSize / 2, 50, 'yellow', 2, 1); // Particles for '2'
+                }
+            }
+        }
+
+        function drawCountdown() {
+            if (countdownActive) {
+                ctx.save();
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; // Semi-transparent overlay
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.fillStyle = 'white';
+                ctx.font = '50px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(countdownText, canvas.width / 2, canvas.height / 2);
+                ctx.restore();
+            }
+        }
+
         // Drawing Functions
         function drawMap() {
             ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -482,7 +538,7 @@
                         player.inventory.push(item);
                     }
                     loot.splice(lootIndex, 1);
-                    createParticles(player.x, player.y, 10, 'gold', 2, 0.5); // Pickup particles
+                    createParticles(player.x, player.y, 10, 'gold', 2, 0.5);
                     updateQuickAccessDisplay();
                     updateInventoryDisplay();
                 }
@@ -578,7 +634,7 @@
                                     player.xp += 50;
                                     checkLevelUp();
                                     updateInfo();
-                                    createParticles(enemy.x, enemy.y, 20, 'red', 3, 0.5); // Death particles
+                                    createParticles(enemy.x, enemy.y, 20, 'red', 3, 0.5);
                                     dropLoot(enemy.x, enemy.y);
                                     enemies.splice(i, 1);
                                     i--;
@@ -600,12 +656,17 @@
                 player.health = player.maxHealth;
                 player.attack += 5;
                 alert(`Level Up! You are now Level ${player.level}. Max Health: ${player.maxHealth}, Attack: ${player.attack}`);
-                createParticles(player.x, player.y, 30, 'gold', 2, 1); // Level-up particles
+                createParticles(player.x, player.y, 30, 'gold', 2, 1);
                 updateInfo();
             }
         }
 
         function updateGameState(deltaTime) {
+            if (countdownActive) {
+                updateCountdown(deltaTime);
+                return; // Skip normal game logic during countdown
+            }
+
             player.moveCooldown -= deltaTime;
             player.fireCooldown -= deltaTime;
             player.speedBoostTimer -= deltaTime;
@@ -631,7 +692,7 @@
 
             if (player.healthRegenTimer > 0) {
                 player.health = Math.min(player.maxHealth, player.health + 1);
-                createParticles(player.x, player.y, 5, 'lime', 1, 0.3); // Regen particles
+                createParticles(player.x, player.y, 5, 'lime', 1, 0.3);
                 updateInfo();
             }
 
@@ -692,7 +753,7 @@
                     if (arrow.isAoE) {
                         applyAoEDamage(cellX, cellY, arrow.damage);
                     }
-                    createParticles(cellX, cellY, 10, arrow.isPlayer ? 'blue' : 'red', 2, 0.3); // Wall hit particles
+                    createParticles(cellX, cellY, 10, arrow.isPlayer ? 'blue' : 'red', 2, 0.3);
                     arrows.splice(i, 1);
                 } else if (arrow.isPlayer) {
                     for (let j = 0; j < enemies.length; j++) {
@@ -707,13 +768,13 @@
                                     const dy = enemy.y - player.y;
                                     applyKnockback(enemy, dx, dy, 2);
                                     addDamagePopup(enemy.x, enemy.y, arrow.damage);
-                                    createParticles(enemy.x, enemy.y, 15, 'orange', 2, 0.4); // Hit particles
+                                    createParticles(enemy.x, enemy.y, 15, 'orange', 2, 0.4);
                                 }
                                 if (enemy.health <= 0) {
                                     player.xp += 50;
                                     checkLevelUp();
                                     updateInfo();
-                                    createParticles(enemy.x, enemy.y, 20, 'red', 3, 0.5); // Death particles
+                                    createParticles(enemy.x, enemy.y, 20, 'red', 3, 0.5);
                                     dropLoot(enemy.x, enemy.y);
                                     enemies.splice(j, 1);
                                     j--;
@@ -729,7 +790,7 @@
                         arrow.dx = -arrow.dx;
                         arrow.dy = -arrow.dy;
                         arrow.isPlayer = false;
-                        createParticles(player.x, player.y, 10, 'blue', 2, 0.3); // Deflection particles
+                        createParticles(player.x, player.y, 10, 'blue', 2, 0.3);
                         fireArrow(player.x, player.y, 0, -1, true);
                         fireArrow(player.x, player.y, 0, 1, true);
                         fireArrow(player.x, player.y, -1, 0, true);
@@ -739,7 +800,7 @@
                         player.health -= Math.max(damage, 0);
                         applyKnockback(player, -arrow.dx, -arrow.dy, 1);
                         addDamagePopup(player.x, player.y, Math.max(damage, 0));
-                        createParticles(player.x, player.y, 10, 'red', 2, 0.3); // Damage particles
+                        createParticles(player.x, player.y, 10, 'red', 2, 0.3);
                         if (player.health <= 0) gameOver();
                         arrows.splice(i, 1);
                     }
@@ -759,6 +820,7 @@
             drawArrows();
             drawParticles();
             drawPopups();
+            drawCountdown(); // Draw countdown last to overlay everything
         }
 
         function gameLoop(timestamp) {
@@ -783,7 +845,7 @@
             player.x = 1;
             player.y = 1;
             alert("You died! Respawned with half health.");
-            createParticles(player.x, player.y, 20, 'purple', 2, 0.5); // Respawn particles
+            createParticles(player.x, player.y, 20, 'purple', 2, 0.5);
             updateInfo();
         }
 
@@ -796,9 +858,10 @@
             loot = generateLoot();
             exitUnlocked = false;
             hasDroppedThisStage = false;
-            createParticles(player.x, player.y, 30, 'green', 3, 0.7); // Stage advance particles
+            createParticles(player.x, player.y, 30, 'green', 3, 0.7);
             updateInfo();
             alert(`Welcome to Stage ${stage}!`);
+            startCountdown(); // Start countdown after advancing stage
         }
 
         function updateInfo() {
@@ -967,12 +1030,57 @@
             }
         });
 
+        // **New Keyboard Event Listeners**
+        document.addEventListener('keydown', (e) => {
+            // Movement
+            if (e.key === 'w') movingUp = true;
+            if (e.key === 'a') movingLeft = true;
+            if (e.key === 's') movingDown = true;
+            if (e.key === 'd') movingRight = true;
+            // Firing
+            if (e.key === 'ArrowUp' && !firingUpPressed && player.fireCooldown <= 0) {
+                fireArrow(player.x, player.y, 0, -1);
+                player.fireCooldown = player.equippedWeapon ? player.equippedWeapon.fireRate : 0.5;
+                firingUpPressed = true;
+            }
+            if (e.key === 'ArrowLeft' && !firingLeftPressed && player.fireCooldown <= 0) {
+                fireArrow(player.x, player.y, -1, 0);
+                player.fireCooldown = player.equippedWeapon ? player.equippedWeapon.fireRate : 0.5;
+                firingLeftPressed = true;
+            }
+            if (e.key === 'ArrowRight' && !firingRightPressed && player.fireCooldown <= 0) {
+                fireArrow(player.x, player.y, 1, 0);
+                player.fireCooldown = player.equippedWeapon ? player.equippedWeapon.fireRate : 0.5;
+                firingRightPressed = true;
+            }
+            if (e.key === 'ArrowDown' && !firingDownPressed && player.fireCooldown <= 0) {
+                fireArrow(player.x, player.y, 0, 1);
+                player.fireCooldown = player.equippedWeapon ? player.equippedWeapon.fireRate : 0.5;
+                firingDownPressed = true;
+            }
+        });
+
+        document.addEventListener('keyup', (e) => {
+            // Movement
+            if (e.key === 'w') movingUp = false;
+            if (e.key === 'a') movingLeft = false;
+            if (e.key === 's') movingDown = false;
+            if (e.key === 'd') movingRight = false;
+            // Firing flags reset
+            if (e.key === 'ArrowUp') firingUpPressed = false;
+            if (e.key === 'ArrowLeft') firingLeftPressed = false;
+            if (e.key === 'ArrowRight') firingRightPressed = false;
+            if (e.key === 'ArrowDown') firingDownPressed = false;
+        });
+
         document.getElementById('toggleInventory').addEventListener('click', () => {
             const inventoryDiv = document.getElementById('inventory');
             inventoryDiv.style.display = inventoryDiv.style.display === 'none' ? 'block' : 'none';
             updateInventoryDisplay();
         });
 
+        // Start the game with a countdown
+        startCountdown();
         requestAnimationFrame(gameLoop);
     </script>
 </body>
