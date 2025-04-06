@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dungeon Crawler - Mage Quest</title>
     <style>
-        /* Existing styles remain unchanged */
         body {
             margin: 0;
             padding: 20px;
@@ -27,7 +26,7 @@
             border: 1px solid #000;
             display: block;
         }
-        #controls, #quickAccessBar, #weaponQuickBar {
+        #controls, #quickAccessBar, #spellQuickBar {
             width: 100%;
             max-width: 400px;
             margin-top: 10px;
@@ -89,12 +88,12 @@
         #inventoryList li button {
             margin-left: 10px;
         }
-        #quickAccessBar, #weaponQuickBar {
+        #quickAccessBar, #spellQuickBar {
             display: flex;
             justify-content: center;
             flex-wrap: wrap;
         }
-        .quickSlot, .weaponSlot {
+        .quickSlot, .spellSlot {
             position: relative;
             width: 50px;
             height: 50px;
@@ -107,7 +106,7 @@
             cursor: pointer;
             transition: transform 0.2s;
         }
-        .quickSlot:hover, .weaponSlot:hover {
+        .quickSlot:hover, .spellSlot:hover {
             background-color: #ddd;
             transform: scale(1.1);
         }
@@ -156,16 +155,16 @@
                 <button class="down" id="moveDown">⬇️</button>
             </div>
             <div id="firingDpad" class="dpad">
-                <button class="up" id="fireUp">🔥⬆️</button>
-                <button class="left" id="fireLeft">🔥⬅️</button>
-                <button class="right" id="fireRight">🔥➡️</button>
-                <button class="down" id="fireDown">🔥⬇️</button>
+                <button class="up" id="fireUp">✨⬆️</button>
+                <button class="left" id="fireLeft">✨⬅️</button>
+                <button class="right" id="fireRight">✨➡️</button>
+                <button class="down" id="fireDown">✨⬇️</button>
             </div>
         </div>
         <button id="toggleInventory">Inventory</button>
         <div id="inventory">
             <h3>Equipped:</h3>
-            <p id="equippedWeapon">Weapon: None</p>
+            <p id="equippedSpell">Spell: None</p>
             <p id="equippedArmor">Armor: None</p>
             <h3>Inventory:</h3>
             <ul id="inventoryList"></ul>
@@ -177,10 +176,10 @@
             <div class="quickSlot" data-slot="3"><span class="key">4</span><span class="item"></span></div>
             <div class="quickSlot" data-slot="4"><span class="key">5</span><span class="item"></span></div>
         </div>
-        <div id="weaponQuickBar">
-            <div class="weaponSlot" data-slot="0"><span class="key">6</span><span class="item"></span></div>
-            <div class="weaponSlot" data-slot="1"><span class="key">7</span><span class="item"></span></div>
-            <div class="weaponSlot" data-slot="2"><span class="key">8</span><span class="item"></span></div>
+        <div id="spellQuickBar">
+            <div class="spellSlot" data-slot="0"><span class="key">6</span><span class="item"></span></div>
+            <div class="spellSlot" data-slot="1"><span class="key">7</span><span class="item"></span></div>
+            <div class="spellSlot" data-slot="2"><span class="key">8</span><span class="item"></span></div>
         </div>
         <div id="notification"></div>
     </div>
@@ -197,11 +196,11 @@
             right: { dx: 1, dy: 0 },
             down: { dx: 0, dy: 1 }
         };
-        const MAX_ARROWS = 50;  // Cap on number of arrows
-        const MAX_PARTICLES = 500;  // Cap on number of particles
+        const MAX_ARROWS = 50;
+        const MAX_PARTICLES = 500;
         const POISON_DAMAGE = 2;
-        const POISON_INTERVAL = 1; // seconds
-        const POISON_DURATION = 5; // seconds
+        const POISON_INTERVAL = 1;
+        const POISON_DURATION = 5;
 
         function resizeCanvas() {
             const displaySize = Math.min(window.innerWidth, window.innerHeight) * 0.8;
@@ -222,12 +221,12 @@
             moveCooldown: 0, fireCooldown: 0, speedBoostTimer: 0, megaDamageTimer: 0, shieldTimer: 0,
             teleportTimer: 0, timeFreezeTimer: 0, invisibilityTimer: 0, doubleArrowTimer: 0,
             healthRegenTimer: 0, explosiveArrowsTimer: 0, slowTimer: 0, trail: [],
-            equippedWeapon: null, equippedArmor: null, inventory: [],
+            equippedSpell: null, equippedArmor: null, inventory: [],
             quickAccess: [null, null, null, null, null],
-            weaponQuickAccess: [null, null, null],
+            spellQuickAccess: [null, null, null],
             charging: { up: false, left: false, right: false, down: false },
             chargeStartTime: { up: 0, left: 0, right: 0, down: 0 },
-            critChance: 0.1, // 10% critical chance
+            critChance: 0.1,
             poisonTimer: 0,
             poisonAccumulator: 0,
             poisonParticleTimer: 0
@@ -256,13 +255,22 @@
         ];
         let currentTileSet = tileSets[0];
 
-        const rareWeapons = [
-            { type: 'weapon', name: 'Bow', attack: 15, fireRate: 0.5, symbol: '🏹', spread: false, isAoE: false, poisonChance: 0.1 },
-            { type: 'weapon', name: 'Crossbow', attack: 20, fireRate: 0.3, symbol: '🏹', spread: false, isAoE: false },
-            { type: 'weapon', name: 'Shotgun', attack: 10, fireRate: 0.7, symbol: '🔫', spread: true, isAoE: false },
-            { type: 'weapon', name: 'Grenade Launcher', attack: 25, fireRate: 1.0, symbol: '💣', spread: false, isAoE: true },
-            { type: 'weapon', name: 'Sniper Rifle', attack: 40, fireRate: 1.5, symbol: '🔫', spread: false, isAoE: false },
-            { type: 'weapon', name: 'Machine Gun', attack: 5, fireRate: 0.1, symbol: '🔫', spread: false, isAoE: false }
+        const spellColors = {
+            'Magic Missile': 'blue',
+            'Arcane Bolt': 'purple',
+            'Scatter Spell': 'white',
+            'Fireball': 'red',
+            'Disintegrate': 'green',
+            'Arcane Barrage': 'cyan'
+        };
+
+        const rareSpells = [
+            { type: 'spell', name: 'Magic Missile', attack: 15, fireRate: 0.5, symbol: '✨', spread: false, isAoE: false, poisonChance: 0.1 },
+            { type: 'spell', name: 'Arcane Bolt', attack: 20, fireRate: 0.3, symbol: '💫', spread: false, isAoE: false },
+            { type: 'spell', name: 'Scatter Spell', attack: 10, fireRate: 0.7, symbol: '🌟', spread: true, isAoE: false },
+            { type: 'spell', name: 'Fireball', attack: 25, fireRate: 1.0, symbol: '🔥', spread: false, isAoE: true },
+            { type: 'spell', name: 'Disintegrate', attack: 40, fireRate: 1.5, symbol: '☄️', spread: false, isAoE: false },
+            { type: 'spell', name: 'Arcane Barrage', attack: 5, fireRate: 0.1, symbol: '🌠', spread: false, isAoE: false }
         ];
         const rareArmor = [
             { type: 'armor', name: 'Leather Armor', defense: 5, symbol: '🛡️' },
@@ -320,8 +328,8 @@
                     }
                 }
             }
-            map[1][1] = 0; // Start position
-            map[8][8] = 0; // Exit position
+            map[1][1] = 0;
+            map[8][8] = 0;
             return isConnected(map) ? map : generateMap();
         }
 
@@ -403,7 +411,7 @@
                     moveSpeed: type.moveSpeed + Math.random() * 0.2,
                     symbol: type.symbol, speedBoostTimer: 0, megaDamageTimer: 0, shieldTimer: 0,
                     renderX: x, renderY: y, bounceTargetX: null, bounceTargetY: null, bounceTimer: 0,
-                    critChance: 0.05, // 5% critical chance for enemies
+                    critChance: 0.05,
                     poisonTimer: 0,
                     poisonAccumulator: 0,
                     poisonParticleTimer: 0
@@ -630,14 +638,13 @@
             ctx.fillStyle = 'green';
             ctx.fillRect(player.x * cellSize + (cellSize - healthBarWidth) / 2, player.y * cellSize - 10, healthBarWidth * healthRatio, healthBarHeight);
 
-            // Draw charge gauge
             const currentTime = performance.now();
             for (const dir in player.charging) {
                 if (player.charging[dir]) {
                     const chargeTime = (currentTime - player.chargeStartTime[dir]) / 1000;
                     const multiplier = Math.min(3, 1 + chargeTime);
                     drawChargeGauge(player.x * cellSize + cellSize / 2, player.y * cellSize - 5, multiplier);
-                    break; // Only show gauge for the first active direction
+                    break;
                 }
             }
 
@@ -656,7 +663,7 @@
                 const size = arrow.size || 1;
                 let strokeColor;
                 if (arrow.isPlayer) {
-                    strokeColor = arrow.chargeColor || (player.megaDamageTimer > 0 ? `hsl(300, 100%, ${50 + Math.sin(pulseTime * 5) * 20}%)` : 'blue');
+                    strokeColor = arrow.chargeColor || (player.megaDamageTimer > 0 ? `hsl(300, 100%, ${50 + Math.sin(pulseTime * 5) * 20}%)` : arrow.color);
                 } else {
                     strokeColor = 'red';
                 }
@@ -668,7 +675,7 @@
                 ctx.stroke();
 
                 ctx.globalAlpha = 0.5;
-                ctx.fillStyle = arrow.isPlayer ? 'cyan' : 'orange';
+                ctx.fillStyle = arrow.isPlayer ? arrow.color : 'orange';
                 ctx.beginPath();
                 ctx.arc(arrow.x * cellSize, arrow.y * cellSize, 2 * size, 0, Math.PI * 2);
                 ctx.fill();
@@ -711,10 +718,10 @@
                         } else {
                             player.inventory.push(item);
                         }
-                    } else if (item.type === 'weapon') {
-                        const weaponSlotIndex = player.weaponQuickAccess.findIndex(slot => slot === null);
-                        if (weaponSlotIndex !== -1) {
-                            player.weaponQuickAccess[weaponSlotIndex] = item;
+                    } else if (item.type === 'spell') {
+                        const spellSlotIndex = player.spellQuickAccess.findIndex(slot => slot === null);
+                        if (spellSlotIndex !== -1) {
+                            player.spellQuickAccess[spellSlotIndex] = item;
                         } else {
                             player.inventory.push(item);
                         }
@@ -724,7 +731,7 @@
                     loot.splice(lootIndex, 1);
                     createParticles(player.x, player.y, 10, 'gold', 2, 0.5);
                     updateQuickAccessDisplay();
-                    updateWeaponQuickAccessDisplay();
+                    updateSpellQuickAccessDisplay();
                     updateInventoryDisplay();
                 }
                 if (exitUnlocked && player.x === 8 && player.y === 8) advanceStage();
@@ -732,25 +739,26 @@
         }
 
         function fireArrow(x, y, dx, dy, isPlayer = true, customDamage = null, chargeTime = 0) {
-            if (arrows.length >= MAX_ARROWS) return;  // Prevent arrow overflow
+            if (arrows.length >= MAX_ARROWS) return;
             const shooter = isPlayer ? player : enemies.find(e => e.x === x && e.y === y);
             const critChance = shooter ? shooter.critChance : 0;
             const isCritical = Math.random() < critChance;
-            const weaponBonus = isPlayer && player.equippedWeapon ? player.equippedWeapon.attack : 0;
+            const spellBonus = isPlayer && player.equippedSpell ? player.equippedSpell.attack : 0;
             const baseDamage = isPlayer ? player.attack : 5;
-            let damage = customDamage !== null ? customDamage : (isPlayer ? (player.megaDamageTimer > 0 ? (baseDamage + weaponBonus) * 2 : (baseDamage + weaponBonus)) : baseDamage);
-            if (isCritical) damage *= 2; // Critical hit doubles damage
+            let damage = customDamage !== null ? customDamage : (isPlayer ? (player.megaDamageTimer > 0 ? (baseDamage + spellBonus) * 2 : (baseDamage + spellBonus)) : baseDamage);
+            if (isCritical) damage *= 2;
             const multiplier = isPlayer ? Math.min(3, 1 + chargeTime) : 1;
             damage *= multiplier;
             const size = getArrowSize(damage);
             const chargeColor = isPlayer ? (multiplier < 1.5 ? 'green' : multiplier <= 2.5 ? 'yellow' : 'red') : null;
             const arrow = { 
                 x: x + 0.5, y: y + 0.5, dx, dy, isPlayer, damage, size, isCritical,
-                isAoE: isPlayer && (player.equippedWeapon ? player.equippedWeapon.isAoE : false) || (player.explosiveArrowsTimer > 0),
-                isPoison: isPlayer && player.equippedWeapon && player.equippedWeapon.poisonChance && Math.random() < player.equippedWeapon.poisonChance,
-                chargeColor: chargeColor
+                isAoE: isPlayer && (player.equippedSpell ? player.equippedSpell.isAoE : false) || (player.explosiveArrowsTimer > 0),
+                isPoison: isPlayer && player.equippedSpell && player.equippedSpell.poisonChance && Math.random() < player.equippedSpell.poisonChance,
+                chargeColor: chargeColor,
+                color: isPlayer ? (player.equippedSpell ? spellColors[player.equippedSpell.name] : 'blue') : 'red'
             };
-            if (player.equippedWeapon && player.equippedWeapon.spread && isPlayer && arrows.length + 2 < MAX_ARROWS) {
+            if (player.equippedSpell && player.equippedSpell.spread && isPlayer && arrows.length + 2 < MAX_ARROWS) {
                 arrows.push({ ...arrow, dx: dx + 0.1 });
                 arrows.push({ ...arrow, dx: dx - 0.1 });
             }
@@ -758,7 +766,11 @@
             if (player.doubleArrowTimer > 0 && isPlayer && arrows.length < MAX_ARROWS) {
                 arrows.push({ ...arrow, x: x + 0.5 + (dx * 0.1), y: y + 0.5 + (dy * 0.1) });
             }
-            if (isPlayer) player.fireCooldown = player.equippedWeapon ? player.equippedWeapon.fireRate : 0.5;
+            if (isPlayer) {
+                player.fireCooldown = player.equippedSpell ? player.equippedSpell.fireRate : 0.5;
+                const particleCount = 5 + Math.floor(chargeTime * 5);
+                createParticles(player.x, player.y, particleCount, arrow.color, 1, 0.2);
+            }
         }
 
         function applyKnockback(target, dx, dy, distance = 1) {
@@ -782,13 +794,13 @@
             const isLastEnemy = enemies.length === 1;
             if (roll < 0.5 || (isLastEnemy && !hasDroppedThisStage)) {
                 let typeRoll = Math.random();
-                let type = typeRoll < 0.7 ? rareWeapons : typeRoll < 0.9 ? rareArmor : rarePotions;
+                let type = typeRoll < 0.7 ? rareSpells : typeRoll < 0.9 ? rareArmor : rarePotions;
                 drops.push({ x, y, ...type[Math.floor(Math.random() * type.length)] });
                 hasDroppedThisStage = true;
             }
             if (Math.random() < 0.2) {
                 let typeRoll = Math.random();
-                let type = typeRoll < 0.7 ? rareWeapons : typeRoll < 0.9 ? rareArmor : rarePotions;
+                let type = typeRoll < 0.7 ? rareSpells : typeRoll < 0.9 ? rareArmor : rarePotions;
                 drops.push({ x, y, ...type[Math.floor(Math.random() * type.length)] });
             }
             drops.forEach(drop => loot.push(drop));
@@ -975,7 +987,6 @@
                         enemy.moveCooldown = enemy.moveSpeed;
                     }
 
-                    // Poison logic for enemies
                     if (enemy.poisonTimer > 0) {
                         enemy.poisonTimer -= deltaTime;
                         if (enemy.poisonTimer < 0) enemy.poisonTimer = 0;
@@ -1016,7 +1027,7 @@
                         applyAoEDamage(cellX, cellY, arrow.damage);
                         createExplosionParticles(cellX, cellY, arrow.damage);
                     } else {
-                        createParticles(cellX, cellY, 10 * arrow.size, arrow.isPlayer ? 'blue' : 'red', 2, 0.3);
+                        createParticles(cellX, cellY, 10 * arrow.size, arrow.color, 2, 0.3);
                     }
                     arrows.splice(i, 1);
                 } else if (arrow.isPlayer) {
@@ -1036,7 +1047,7 @@
                                 } else {
                                     addDamagePopup(enemy.x, enemy.y, arrow.damage);
                                 }
-                                createParticles(enemy.x, enemy.y, 15 * arrow.size, 'orange', 2, 0.4);
+                                createParticles(enemy.x, enemy.y, 15 * arrow.size, arrow.color, 2, 0.4);
                                 if (arrow.isPoison) {
                                     enemy.poisonTimer = POISON_DURATION;
                                     enemy.poisonAccumulator = 0;
@@ -1078,7 +1089,7 @@
                         } else {
                             addDamagePopup(player.x, player.y, Math.max(damage, 0));
                         }
-                        createParticles(player.x, player.y, 10 * arrow.size, 'red', 2, 0.3);
+                        createParticles(player.x, player.y, 10 * arrow.size, arrow.color, 2, 0.3);
                         if (player.health <= 0) gameOver();
                         arrows.splice(i, 1);
                     }
@@ -1102,7 +1113,7 @@
         }
 
         function gameLoop(timestamp) {
-            const deltaTime = Math.min((timestamp - lastTimestamp) / 1000, 0.1); // Cap deltaTime to prevent large jumps
+            const deltaTime = Math.min((timestamp - lastTimestamp) / 1000, 0.1);
             lastTimestamp = timestamp;
             updateGameState(deltaTime);
             renderScene();
@@ -1191,7 +1202,7 @@
         }
 
         function updateInventoryDisplay() {
-            document.getElementById('equippedWeapon').textContent = `Weapon: ${player.equippedWeapon ? player.equippedWeapon.name : 'None'}`;
+            document.getElementById('equippedSpell').textContent = `Spell: ${player.equippedSpell ? player.equippedSpell.name : 'None'}`;
             document.getElementById('equippedArmor').textContent = `Armor: ${player.equippedArmor ? player.equippedArmor.name : 'None'}`;
             const list = document.getElementById('inventoryList');
             list.innerHTML = '';
@@ -1211,9 +1222,9 @@
 
         function useItem(index) {
             const item = player.inventory[index];
-            if (item.type === 'weapon') {
-                if (player.equippedWeapon) player.inventory.push(player.equippedWeapon);
-                player.equippedWeapon = item;
+            if (item.type === 'spell') {
+                if (player.equippedSpell) player.inventory.push(player.equippedSpell);
+                player.equippedSpell = item;
                 player.inventory.splice(index, 1);
             } else if (item.type === 'armor') {
                 if (player.equippedArmor) player.inventory.push(player.equippedArmor);
@@ -1273,40 +1284,40 @@
             }
         }
 
-        const weaponSlots = document.querySelectorAll('.weaponSlot');
-        weaponSlots.forEach(slot => {
-            slot.addEventListener('click', () => equipWeaponFromQuickAccess(parseInt(slot.getAttribute('data-slot'), 10)));
+        const spellSlots = document.querySelectorAll('.spellSlot');
+        spellSlots.forEach(slot => {
+            slot.addEventListener('click', () => equipSpellFromQuickAccess(parseInt(slot.getAttribute('data-slot'), 10)));
             slot.addEventListener('dragover', (e) => e.preventDefault());
             slot.addEventListener('drop', (e) => {
                 e.preventDefault();
                 const index = e.dataTransfer.getData('text/plain');
                 const item = player.inventory[index];
-                if (item && item.type === 'weapon') {
+                if (item && item.type === 'spell') {
                     const slotIndex = parseInt(slot.getAttribute('data-slot'), 10);
-                    player.weaponQuickAccess[slotIndex] = item;
+                    player.spellQuickAccess[slotIndex] = item;
                     player.inventory.splice(index, 1);
                     updateInventoryDisplay();
-                    updateWeaponQuickAccessDisplay();
+                    updateSpellQuickAccessDisplay();
                 }
             });
         });
 
-        function updateWeaponQuickAccessDisplay() {
-            weaponSlots.forEach(slot => {
+        function updateSpellQuickAccessDisplay() {
+            spellSlots.forEach(slot => {
                 const slotIndex = parseInt(slot.getAttribute('data-slot'), 10);
-                const item = player.weaponQuickAccess[slotIndex];
+                const item = player.spellQuickAccess[slotIndex];
                 slot.querySelector('.item').textContent = item ? item.symbol : '';
             });
         }
 
-        function equipWeaponFromQuickAccess(slotIndex) {
-            const weapon = player.weaponQuickAccess[slotIndex];
-            if (weapon) {
-                const temp = player.equippedWeapon;
-                player.equippedWeapon = weapon;
-                player.weaponQuickAccess[slotIndex] = temp;
+        function equipSpellFromQuickAccess(slotIndex) {
+            const spell = player.spellQuickAccess[slotIndex];
+            if (spell) {
+                const temp = player.equippedSpell;
+                player.equippedSpell = spell;
+                player.spellQuickAccess[slotIndex] = temp;
                 updateInventoryDisplay();
-                updateWeaponQuickAccessDisplay();
+                updateSpellQuickAccessDisplay();
             }
         }
 
@@ -1330,10 +1341,9 @@
             movingUp = movingLeft = movingRight = movingDown = false;
         });
 
-        // Updated touch controls
         document.getElementById('fireUp').addEventListener('pointerdown', (e) => {
             e.preventDefault();
-            if (player.fireCooldown <= 0 && !player.charging.up) { // Check if not already charging
+            if (player.fireCooldown <= 0 && !player.charging.up) {
                 player.charging.up = true;
                 player.chargeStartTime.up = performance.now();
             }
@@ -1348,7 +1358,7 @@
         });
         document.getElementById('fireLeft').addEventListener('pointerdown', (e) => {
             e.preventDefault();
-            if (player.fireCooldown <= 0 && !player.charging.left) { // Check if not already charging
+            if (player.fireCooldown <= 0 && !player.charging.left) {
                 player.charging.left = true;
                 player.chargeStartTime.left = performance.now();
             }
@@ -1363,7 +1373,7 @@
         });
         document.getElementById('fireRight').addEventListener('pointerdown', (e) => {
             e.preventDefault();
-            if (player.fireCooldown <= 0 && !player.charging.right) { // Check if not already charging
+            if (player.fireCooldown <= 0 && !player.charging.right) {
                 player.charging.right = true;
                 player.chargeStartTime.right = performance.now();
             }
@@ -1378,7 +1388,7 @@
         });
         document.getElementById('fireDown').addEventListener('pointerdown', (e) => {
             e.preventDefault();
-            if (player.fireCooldown <= 0 && !player.charging.down) { // Check if not already charging
+            if (player.fireCooldown <= 0 && !player.charging.down) {
                 player.charging.down = true;
                 player.chargeStartTime.down = performance.now();
             }
@@ -1392,30 +1402,29 @@
             }
         });
 
-        // Updated keyboard controls
         document.addEventListener('keydown', (e) => {
             if (e.key === 'w') movingUp = true;
             if (e.key === 'a') movingLeft = true;
             if (e.key === 's') movingDown = true;
             if (e.key === 'd') movingRight = true;
-            if (e.key === 'ArrowUp' && player.fireCooldown <= 0 && !player.charging.up) { // Check if not already charging
+            if (e.key === 'ArrowUp' && player.fireCooldown <= 0 && !player.charging.up) {
                 player.charging.up = true;
                 player.chargeStartTime.up = performance.now();
             }
-            if (e.key === 'ArrowLeft' && player.fireCooldown <= 0 && !player.charging.left) { // Check if not already charging
+            if (e.key === 'ArrowLeft' && player.fireCooldown <= 0 && !player.charging.left) {
                 player.charging.left = true;
                 player.chargeStartTime.left = performance.now();
             }
-            if (e.key === 'ArrowRight' && player.fireCooldown <= 0 && !player.charging.right) { // Check if not already charging
+            if (e.key === 'ArrowRight' && player.fireCooldown <= 0 && !player.charging.right) {
                 player.charging.right = true;
                 player.chargeStartTime.right = performance.now();
             }
-            if (e.key === 'ArrowDown' && player.fireCooldown <= 0 && !player.charging.down) { // Check if not already charging
+            if (e.key === 'ArrowDown' && player.fireCooldown <= 0 && !player.charging.down) {
                 player.charging.down = true;
                 player.chargeStartTime.down = performance.now();
             }
             if (e.key >= '1' && e.key <= '5') useQuickAccessItem(parseInt(e.key) - 1);
-            if (e.key >= '6' && e.key <= '8') equipWeaponFromQuickAccess(parseInt(e.key) - 6);
+            if (e.key >= '6' && e.key <= '8') equipSpellFromQuickAccess(parseInt(e.key) - 6);
         });
 
         document.addEventListener('keyup', (e) => {
