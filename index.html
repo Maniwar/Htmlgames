@@ -194,6 +194,46 @@
         <div id="notification"></div>
     </div>
     <script>
+        // Game Configuration Object for Speed Adjustments
+        const GAME_CONFIG = {
+            // Player movement cooldowns in seconds (lower is faster)
+            PLAYER_BASE_MOVE_COOLDOWN: 0.1,
+            PLAYER_SPEED_BOOST_MOVE_COOLDOWN: 0.05,
+            PLAYER_SLOW_MOVE_COOLDOWN: 0.2,
+            
+            // Player firing rates in seconds (higher is slower)
+            PLAYER_DEFAULT_FIRE_RATE: 0.5,
+            PLAYER_MIN_FIRE_RATE: 0.1,
+            
+            // Projectile speeds (cells per second)
+            PLAYER_PROJECTILE_SPEED: 5,
+            ENEMY_PROJECTILE_SPEED: 5,
+            
+            // Enemy firing cooldown in seconds (higher is slower)
+            ENEMY_FIRE_COOLDOWN: 1,
+            ENEMY_FIRE_CHANCE_VARIATION: 0.05,
+            
+            // Enemy movement cooldowns in seconds (higher is slower)
+            ENEMY_GRUNT_MOVE_SPEED: 1.0,
+            ENEMY_SNIPER_MOVE_SPEED: 2.7,
+            ENEMY_TANK_MOVE_SPEED: 3.0,
+            ENEMY_SUMMONER_MOVE_SPEED: 4.5,
+            ENEMY_MAGE_MOVE_SPEED: 2.7,
+            ENEMY_SUMMONED_GRUNT_MOVE_SPEED: 0.5,
+            
+            // Base fire chances for enemies (probability per frame)
+            ENEMY_GRUNT_FIRE_CHANCE: 0.05,
+            ENEMY_SNIPER_FIRE_CHANCE: 0.1,
+            ENEMY_TANK_FIRE_CHANCE: 0,
+            ENEMY_SUMMONER_FIRE_CHANCE: 0,
+            ENEMY_MAGE_FIRE_CHANCE: 0,
+            ENEMY_SUMMONED_GRUNT_FIRE_CHANCE: 0.05,
+            
+            // Enemy special cooldowns in seconds
+            ENEMY_MAGE_SPELL_COOLDOWN: 3,
+            ENEMY_SUMMONER_SUMMON_COOLDOWN: 5
+        };
+
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
         const cellSize = 40;
@@ -422,11 +462,11 @@
             const baseHealth = 300 + (stage - 1) * 10;
             const baseAttack = 5 + Math.floor((stage - 1) / 2);
             const enemyTypes = [
-                { type: 'grunt', maxHealth: baseHealth, health: baseHealth, attack: baseAttack, fireChance: 0.05, moveSpeed: 1.0, symbol: '👾', resistance: 'fire' },
-                { type: 'sniper', maxHealth: baseHealth - 10, health: baseHealth - 10, attack: baseAttack + 2, fireChance: 0.1, moveSpeed: 2.7, symbol: '🧟', resistance: 'ice' },
-                { type: 'tank', maxHealth: baseHealth + 20, health: baseHealth + 20, attack: baseAttack + 3, fireChance: 0, moveSpeed: 3, symbol: '👹', resistance: 'lightning' },
-                { type: 'summoner', maxHealth: baseHealth - 20, health: baseHealth - 20, attack: baseAttack - 2, fireChance: 0, moveSpeed: 4.5, symbol: '🧙‍♂️', summonCooldown: 5, resistance: 'earth' },
-                { type: 'mage', maxHealth: baseHealth - 30, health: baseHealth - 30, attack: baseAttack, fireChance: 0, moveSpeed: 2.7, symbol: '🧙‍♀️', spellCooldown: 3, spells: ['fireball', 'slow'], resistance: 'fire' }
+                { type: 'grunt', maxHealth: baseHealth, health: baseHealth, attack: baseAttack, fireChance: GAME_CONFIG.ENEMY_GRUNT_FIRE_CHANCE, moveSpeed: GAME_CONFIG.ENEMY_GRUNT_MOVE_SPEED, symbol: '👾', resistance: 'fire' },
+                { type: 'sniper', maxHealth: baseHealth - 10, health: baseHealth - 10, attack: baseAttack + 2, fireChance: GAME_CONFIG.ENEMY_SNIPER_FIRE_CHANCE, moveSpeed: GAME_CONFIG.ENEMY_SNIPER_MOVE_SPEED, symbol: '🧟', resistance: 'ice' },
+                { type: 'tank', maxHealth: baseHealth + 20, health: baseHealth + 20, attack: baseAttack + 3, fireChance: GAME_CONFIG.ENEMY_TANK_FIRE_CHANCE, moveSpeed: GAME_CONFIG.ENEMY_TANK_MOVE_SPEED, symbol: '👹', resistance: 'lightning' },
+                { type: 'summoner', maxHealth: baseHealth - 20, health: baseHealth - 20, attack: baseAttack - 2, fireChance: GAME_CONFIG.ENEMY_SUMMONER_FIRE_CHANCE, moveSpeed: GAME_CONFIG.ENEMY_SUMMONER_MOVE_SPEED, symbol: '🧙‍♂️', summonCooldown: GAME_CONFIG.ENEMY_SUMMONER_SUMMON_COOLDOWN, resistance: 'earth' },
+                { type: 'mage', maxHealth: baseHealth - 30, health: baseHealth - 30, attack: baseAttack, fireChance: GAME_CONFIG.ENEMY_MAGE_FIRE_CHANCE, moveSpeed: GAME_CONFIG.ENEMY_MAGE_MOVE_SPEED, symbol: '🧙‍♀️', spellCooldown: GAME_CONFIG.ENEMY_MAGE_SPELL_COOLDOWN, spells: ['fireball', 'slow'], resistance: 'fire' }
             ];
             const enemyList = [];
             const enemyCount = Math.min(3 + Math.floor(stage / 2), 10);
@@ -441,7 +481,7 @@
                     x, y, health: type.health, maxHealth: type.maxHealth,
                     attack: type.attack + Math.floor(Math.random() * 3) - 1,
                     moveCooldown: 0, fireCooldown: 0, type: type.type,
-                    fireChance: type.fireChance + Math.random() * 0.05,
+                    fireChance: type.fireChance + Math.random() * GAME_CONFIG.ENEMY_FIRE_CHANCE_VARIATION,
                     moveSpeed: type.moveSpeed + Math.random() * 0.2,
                     symbol: type.symbol, speedBoostTimer: 0, megaDamageTimer: 0, shieldTimer: 0,
                     renderX: x, renderY: y, bounceTargetX: null, bounceTargetY: null, bounceTimer: 0,
@@ -802,7 +842,7 @@
                     player.combinedSpell = {
                         name: `Triple ${spell.name}`,
                         attack: spell.attack * 3,
-                        fireRate: Math.max(0.1, spell.fireRate / 3),
+                        fireRate: Math.max(GAME_CONFIG.PLAYER_MIN_FIRE_RATE, spell.fireRate / 3),
                         symbol: spell.symbol,
                         spread: spell.spread,
                         isAoE: spell.isAoE,
@@ -822,7 +862,7 @@
                     player.combinedSpell = {
                         name: 'Combined Spell',
                         attack,
-                        fireRate: Math.max(0.1, fireRate),
+                        fireRate: Math.max(GAME_CONFIG.PLAYER_MIN_FIRE_RATE, fireRate),
                         symbol: '🌌',
                         spread,
                         isAoE,
@@ -851,6 +891,7 @@
             damage *= multiplier;
             const size = getArrowSize(damage);
             const chargeColor = isPlayer ? (multiplier < 1.5 ? 'green' : multiplier <= 2.5 ? 'yellow' : 'red') : null;
+            const speed = isPlayer ? GAME_CONFIG.PLAYER_PROJECTILE_SPEED : GAME_CONFIG.ENEMY_PROJECTILE_SPEED;
             const arrow = { 
                 x: x + 0.5, y: y + 0.5, dx, dy, isPlayer, damage, size, isCritical,
                 isAoE: isPlayer && (spell ? spell.isAoE : false) || (player.explosiveArrowsTimer > 0),
@@ -859,7 +900,8 @@
                 color: isPlayer ? (spell ? spellColors[spell.name] || 'blue' : 'blue') : 'red',
                 element: isPlayer && spell ? spell.element : null,
                 effect: isPlayer && spell ? spell.effect : null,
-                effectStrength: multiplier
+                effectStrength: multiplier,
+                speed: speed
             };
             if (spell && spell.spread && isPlayer && arrows.length + 2 < MAX_ARROWS) {
                 arrows.push({ ...arrow, dx: dx + 0.1 });
@@ -870,7 +912,7 @@
                 arrows.push({ ...arrow, x: x + 0.5 + (dx * 0.1), y: y + 0.5 + (dy * 0.1) });
             }
             if (isPlayer) {
-                player.fireCooldown = Math.max(0.1, spell ? spell.fireRate : 0.5);
+                player.fireCooldown = Math.max(GAME_CONFIG.PLAYER_MIN_FIRE_RATE, spell ? spell.fireRate : GAME_CONFIG.PLAYER_DEFAULT_FIRE_RATE);
                 const particleCount = Math.min(20, 5 + Math.floor(chargeTime * 5));
                 const color = spell ? (spellColors[spell.name] || 'blue') : 'blue';
                 createParticles(player.x, player.y, particleCount, color, 1, 0.1);
@@ -994,7 +1036,7 @@
                 updateInfo();
             }
 
-            const moveCooldown = player.speedBoostTimer > 0 ? 0.05 : (player.slowTimer > 0 ? 0.2 : 0.1);
+            const moveCooldown = player.speedBoostTimer > 0 ? GAME_CONFIG.PLAYER_SPEED_BOOST_MOVE_COOLDOWN : (player.slowTimer > 0 ? GAME_CONFIG.PLAYER_SLOW_MOVE_COOLDOWN : GAME_CONFIG.PLAYER_BASE_MOVE_COOLDOWN);
             if (player.moveCooldown <= 0 && (movingUp || movingLeft || movingRight || movingDown)) {
                 if (movingUp) movePlayer(0, -1);
                 else if (movingDown) movePlayer(0, 1);
@@ -1076,8 +1118,8 @@
                                 const newEnemy = {
                                     x: spot.x, y: spot.y, health: 50, maxHealth: 50, attack: 5,
                                     moveCooldown: 0, fireCooldown: 0, type: 'grunt',
-                                    fireChance: 0.05 + Math.random() * 0.05,
-                                    moveSpeed: 0.5 + Math.random() * 0.2,
+                                    fireChance: GAME_CONFIG.ENEMY_SUMMONED_GRUNT_FIRE_CHANCE + Math.random() * GAME_CONFIG.ENEMY_FIRE_CHANCE_VARIATION,
+                                    moveSpeed: GAME_CONFIG.ENEMY_SUMMONED_GRUNT_MOVE_SPEED + Math.random() * 0.2,
                                     symbol: '👾', speedBoostTimer: 0, megaDamageTimer: 0, shieldTimer: 0,
                                     renderX: spot.x, renderY: spot.y, bounceTargetX: null, bounceTargetY: null, bounceTimer: 0,
                                     critChance: 0.05,
@@ -1091,7 +1133,7 @@
                                     stunTimer: 0
                                 };
                                 enemies.push(newEnemy);
-                                enemy.summonCooldown = 5;
+                                enemy.summonCooldown = GAME_CONFIG.ENEMY_SUMMONER_SUMMON_COOLDOWN;
                                 createParticles(spot.x, spot.y, 15, 'purple', 2, 0.5);
                             }
                         }
@@ -1109,7 +1151,7 @@
                                 player.slowTimer = 5;
                                 createParticles(player.x, player.y, 15, 'gray', 1, 1);
                             }
-                            enemy.spellCooldown = 3;
+                            enemy.spellCooldown = GAME_CONFIG.ENEMY_MAGE_SPELL_COOLDOWN;
                         }
                     }
 
@@ -1120,7 +1162,7 @@
                             const multiplier = attackMultipliers[attackType];
                             const damage = enemy.attack * multiplier;
                             fireArrow(enemy.x, enemy.y, direction.dx, direction.dy, false, damage);
-                            enemy.fireCooldown = 1;
+                            enemy.fireCooldown = GAME_CONFIG.ENEMY_FIRE_COOLDOWN;
                         }
                     }
                     if (enemy.moveCooldown <= 0 && enemy.stunTimer <= 0) {
@@ -1165,8 +1207,8 @@
 
             for (let i = arrows.length - 1; i >= 0; i--) {
                 const arrow = arrows[i];
-                arrow.x += arrow.dx * 5 * deltaTime;
-                arrow.y += arrow.dy * 5 * deltaTime;
+                arrow.x += arrow.dx * arrow.speed * deltaTime;
+                arrow.y += arrow.dy * arrow.speed * deltaTime;
                 const cellX = Math.floor(arrow.x);
                 const cellY = Math.floor(arrow.y);
 
