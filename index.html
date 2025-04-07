@@ -174,7 +174,7 @@
         <button id="toggleInventory">Inventory</button>
         <div id="inventory">
             <h3>Equipped:</h3>
-            <p id="equippedSpell">Spell: None</p>
+            <p id="inventoryEquippedSpell">Spell: None</p>
             <p id="equippedArmor">Armor: None</p>
             <h3>Inventory:</h3>
             <ul id="inventoryList"></ul>
@@ -238,7 +238,7 @@
             moveCooldown: 0, fireCooldown: 0, speedBoostTimer: 0, megaDamageTimer: 0, shieldTimer: 0,
             teleportTimer: 0, timeFreezeTimer: 0, invisibilityTimer: 0, doubleArrowTimer: 0,
             healthRegenTimer: 0, explosiveArrowsTimer: 0, slowTimer: 0, trail: [],
-            equippedSpell: null, equippedArmor: null, inventory: [],
+            equippedArmor: null, inventory: [],
             quickAccess: [null, null, null, null, null],
             spellQuickAccess: [null, null, null],
             charging: { up: false, left: false, right: false, down: false },
@@ -246,7 +246,8 @@
             critChance: 0.1,
             poisonTimer: 0,
             poisonAccumulator: 0,
-            poisonParticleTimer: 0
+            poisonParticleTimer: 0,
+            combinedSpell: null
         };
         let currentMap = generateMap();
         let enemies = generateEnemies(stage);
@@ -281,7 +282,17 @@
             'Lightning Bolt': 'yellow',
             'Earthquake': 'brown',
             'Disintegrate': 'green',
-            'Arcane Barrage': 'cyan'
+            'Arcane Barrage': 'cyan',
+            'Triple Magic Missile': 'blue',
+            'Triple Arcane Bolt': 'purple',
+            'Triple Scatter Spell': 'white',
+            'Triple Fireball': 'red',
+            'Triple Ice Shard': 'blue',
+            'Triple Lightning Bolt': 'yellow',
+            'Triple Earthquake': 'brown',
+            'Triple Disintegrate': 'green',
+            'Triple Arcane Barrage': 'cyan',
+            'Combined Spell': 'violet'
         };
 
         const rareSpells = [
@@ -408,7 +419,7 @@
         }
 
         function generateEnemies(stage) {
-            const baseHealth = 50 + (stage - 1) * 10;
+            const baseHealth = 300 + (stage - 1) * 10;
             const baseAttack = 5 + Math.floor((stage - 1) / 2);
             const enemyTypes = [
                 { type: 'grunt', maxHealth: baseHealth, health: baseHealth, attack: baseAttack, fireChance: 0.05, moveSpeed: 0.5, symbol: '👾', resistance: 'fire' },
@@ -760,6 +771,8 @@
                         const spellSlotIndex = player.spellQuickAccess.findIndex(slot => slot === null);
                         if (spellSlotIndex !== -1) {
                             player.spellQuickAccess[spellSlotIndex] = item;
+                            updateCombinedSpell();
+                            updateInfo();
                         } else {
                             player.inventory.push(item);
                         }
@@ -776,12 +789,61 @@
             }
         }
 
+        function updateCombinedSpell() {
+            const spells = player.spellQuickAccess.filter(spell => spell !== null);
+            if (spells.length === 0) {
+                player.combinedSpell = null;
+            } else if (spells.length === 1) {
+                player.combinedSpell = spells[0];
+            } else {
+                const allSame = spells.every(spell => spell.name === spells[0].name);
+                if (allSame) {
+                    const spell = spells[0];
+                    player.combinedSpell = {
+                        name: `Triple ${spell.name}`,
+                        attack: spell.attack * 3,
+                        fireRate: Math.max(0.1, spell.fireRate / 3),
+                        symbol: spell.symbol,
+                        spread: spell.spread,
+                        isAoE: spell.isAoE,
+                        poisonChance: Math.min(1, spell.poisonChance * 3),
+                        element: spell.element,
+                        effect: spell.effect,
+                        description: `A powerful version of ${spell.name} with triple the effects.`
+                    };
+                } else {
+                    const attack = spells.reduce((sum, spell) => sum + spell.attack, 0) / spells.length;
+                    const fireRate = Math.min(...spells.map(spell => spell.fireRate));
+                    const spread = spells.some(spell => spell.spread);
+                    const isAoE = spells.some(spell => spell.isAoE);
+                    const poisonChance = Math.max(...spells.map(spell => spell.poisonChance || 0));
+                    const elements = [...new Set(spells.map(spell => spell.element).filter(el => el))];
+                    const effects = [...new Set(spells.map(spell => spell.effect).filter(ef => ef))];
+                    player.combinedSpell = {
+                        name: 'Combined Spell',
+                        attack,
+                        fireRate: Math.max(0.1, fireRate),
+                        symbol: '🌌',
+                        spread,
+                        isAoE,
+                        poisonChance,
+                        element: elements[0] || null,
+                        effect: effects[0] || null,
+                        description: 'A combination of different spells.'
+                    };
+                }
+            }
+            updateInfo();
+            updateInventoryDisplay();
+        }
+
         function fireArrow(x, y, dx, dy, isPlayer = true, customDamage = null, chargeTime = 0) {
             if (arrows.length >= MAX_ARROWS) return;
             const shooter = isPlayer ? player : enemies.find(e => e.x === x && e.y === y);
             const critChance = shooter ? shooter.critChance : 0;
             const isCritical = Math.random() < critChance;
-            const spellBonus = isPlayer && player.equippedSpell ? player.equippedSpell.attack : 0;
+            const spell = isPlayer ? player.combinedSpell : null;
+            const spellBonus = spell ? spell.attack : 0;
             const baseDamage = isPlayer ? player.attack : 5;
             let damage = customDamage !== null ? customDamage : (isPlayer ? (player.megaDamageTimer > 0 ? (baseDamage + spellBonus) * 2 : (baseDamage + spellBonus)) : baseDamage);
             if (isCritical) damage *= 2;
@@ -791,15 +853,15 @@
             const chargeColor = isPlayer ? (multiplier < 1.5 ? 'green' : multiplier <= 2.5 ? 'yellow' : 'red') : null;
             const arrow = { 
                 x: x + 0.5, y: y + 0.5, dx, dy, isPlayer, damage, size, isCritical,
-                isAoE: isPlayer && (player.equippedSpell ? player.equippedSpell.isAoE : false) || (player.explosiveArrowsTimer > 0),
-                isPoison: isPlayer && player.equippedSpell && player.equippedSpell.poisonChance && Math.random() < player.equippedSpell.poisonChance,
+                isAoE: isPlayer && (spell ? spell.isAoE : false) || (player.explosiveArrowsTimer > 0),
+                isPoison: isPlayer && spell && spell.poisonChance && Math.random() < spell.poisonChance,
                 chargeColor: chargeColor,
-                color: isPlayer ? (player.equippedSpell ? spellColors[player.equippedSpell.name] : 'blue') : 'red',
-                element: isPlayer && player.equippedSpell ? player.equippedSpell.element : null,
-                effect: isPlayer && player.equippedSpell ? player.equippedSpell.effect : null,
+                color: isPlayer ? (spell ? spellColors[spell.name] || 'blue' : 'blue') : 'red',
+                element: isPlayer && spell ? spell.element : null,
+                effect: isPlayer && spell ? spell.effect : null,
                 effectStrength: multiplier
             };
-            if (player.equippedSpell && player.equippedSpell.spread && isPlayer && arrows.length + 2 < MAX_ARROWS) {
+            if (spell && spell.spread && isPlayer && arrows.length + 2 < MAX_ARROWS) {
                 arrows.push({ ...arrow, dx: dx + 0.1 });
                 arrows.push({ ...arrow, dx: dx - 0.1 });
             }
@@ -808,9 +870,10 @@
                 arrows.push({ ...arrow, x: x + 0.5 + (dx * 0.1), y: y + 0.5 + (dy * 0.1) });
             }
             if (isPlayer) {
-                player.fireCooldown = player.equippedSpell ? player.equippedSpell.fireRate : 0.5;
-                const particleCount = 5 + Math.floor(chargeTime * 5);
-                createParticles(player.x, player.y, particleCount, arrow.color, 1, 0.2);
+                player.fireCooldown = Math.max(0.1, spell ? spell.fireRate : 0.5);
+                const particleCount = Math.min(20, 5 + Math.floor(chargeTime * 5));
+                const color = spell ? (spellColors[spell.name] || 'blue') : 'blue';
+                createParticles(player.x, player.y, particleCount, color, 1, 0.1);
             }
         }
 
@@ -1266,11 +1329,11 @@
         }
 
         function updateInfo() {
-            document.getElementById('stage').innerText = `Stage: ${stage}`;
-            document.getElementById('health').innerText = `Health: ${Math.floor(player.health)}/${player.maxHealth}`;
-            document.getElementById('level').innerText = `Level: ${player.level}`;
-            document.getElementById('xp').innerText = `XP: ${player.xp}/${player.xpToNext}`;
-            document.getElementById('equippedSpell').innerText = `Spell: ${player.equippedSpell ? player.equippedSpell.name : 'None'}`;
+            document.getElementById('stage').textContent = `Stage: ${stage}`;
+            document.getElementById('health').textContent = `Health: ${Math.floor(player.health)}/${player.maxHealth}`;
+            document.getElementById('level').textContent = `Level: ${player.level}`;
+            document.getElementById('xp').textContent = `XP: ${player.xp}/${player.xpToNext}`;
+            document.getElementById('equippedSpell').textContent = `Spell: ${player.combinedSpell ? player.combinedSpell.name : 'None'}`;
         }
 
         function isInLineOfSight(enemy) {
@@ -1308,7 +1371,7 @@
         }
 
         function updateInventoryDisplay() {
-            document.getElementById('equippedSpell').textContent = `Spell: ${player.equippedSpell ? player.equippedSpell.name : 'None'}`;
+            document.getElementById('inventoryEquippedSpell').textContent = `Spell: ${player.combinedSpell ? player.combinedSpell.name : 'None'}`;
             document.getElementById('equippedArmor').textContent = `Armor: ${player.equippedArmor ? player.equippedArmor.name : 'None'}`;
             const list = document.getElementById('inventoryList');
             list.innerHTML = '';
@@ -1358,10 +1421,14 @@
                     showNotification("You've equipped a spell. Use the firing controls to cast it in combat—it won't be consumed.");
                     hasEquippedSpell = true;
                 }
-                if (player.equippedSpell) player.inventory.push(player.equippedSpell);
-                player.equippedSpell = item;
-                player.inventory.splice(index, 1);
-                updateInfo();
+                const spellSlotIndex = player.spellQuickAccess.findIndex(slot => slot === null);
+                if (spellSlotIndex !== -1) {
+                    player.spellQuickAccess[spellSlotIndex] = item;
+                    player.inventory.splice(index, 1);
+                    updateCombinedSpell();
+                } else {
+                    showNotification("Spell quick-bar is full. Remove a spell to equip this one.");
+                }
             } else if (item.type === 'armor') {
                 if (player.equippedArmor) player.inventory.push(player.equippedArmor);
                 player.equippedArmor = item;
@@ -1376,6 +1443,7 @@
                 player.inventory.splice(index, 1);
             }
             updateInventoryDisplay();
+            updateSpellQuickAccessDisplay();
         }
 
         const quickSlots = document.querySelectorAll('.quickSlot');
@@ -1453,10 +1521,14 @@
                 const item = player.inventory[index];
                 if (item && item.type === 'spell') {
                     const slotIndex = parseInt(slot.getAttribute('data-slot'), 10);
+                    if (player.spellQuickAccess[slotIndex]) {
+                        player.inventory.push(player.spellQuickAccess[slotIndex]);
+                    }
                     player.spellQuickAccess[slotIndex] = item;
                     player.inventory.splice(index, 1);
                     updateInventoryDisplay();
                     updateSpellQuickAccessDisplay();
+                    updateCombinedSpell();
                 }
             });
         });
@@ -1467,7 +1539,7 @@
                 const item = player.spellQuickAccess[slotIndex];
                 slot.querySelector('.item').textContent = item ? item.symbol : '';
                 slot.title = item ? item.description : '';
-                if (item && item === player.equippedSpell) {
+                if (item && player.combinedSpell && player.combinedSpell.name === `Triple ${item.name}`) {
                     slot.style.borderColor = 'gold';
                 } else {
                     slot.style.borderColor = '#ccc';
@@ -1478,12 +1550,11 @@
         function equipSpellFromQuickAccess(slotIndex) {
             const spell = player.spellQuickAccess[slotIndex];
             if (spell) {
-                const temp = player.equippedSpell;
-                player.equippedSpell = spell;
-                player.spellQuickAccess[slotIndex] = temp;
+                player.inventory.push(spell);
+                player.spellQuickAccess[slotIndex] = null;
                 updateInventoryDisplay();
                 updateSpellQuickAccessDisplay();
-                updateInfo();
+                updateCombinedSpell();
             }
         }
 
@@ -1626,6 +1697,7 @@
             if (inventoryDiv.style.display === 'block') updateInventoryDisplay();
         });
 
+        updateCombinedSpell();
         startCountdown();
         requestAnimationFrame(gameLoop);
     </script>
