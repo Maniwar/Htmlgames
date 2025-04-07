@@ -422,11 +422,11 @@
             const baseHealth = 300 + (stage - 1) * 10;
             const baseAttack = 5 + Math.floor((stage - 1) / 2);
             const enemyTypes = [
-                { type: 'grunt', maxHealth: baseHealth, health: baseHealth, attack: baseAttack, fireChance: 0.05, moveSpeed: 0.5, symbol: '👾', resistance: 'fire' },
-                { type: 'sniper', maxHealth: baseHealth - 10, health: baseHealth - 10, attack: baseAttack + 2, fireChance: 0.1, moveSpeed: 0.7, symbol: '🧟', resistance: 'ice' },
-                { type: 'tank', maxHealth: baseHealth + 20, health: baseHealth + 20, attack: baseAttack + 3, fireChance: 0, moveSpeed: 1, symbol: '👹', resistance: 'lightning' },
-                { type: 'summoner', maxHealth: baseHealth - 20, health: baseHealth - 20, attack: baseAttack - 2, fireChance: 0, moveSpeed: 1, symbol: '🧙‍♂️', summonCooldown: 5, resistance: 'earth' },
-                { type: 'mage', maxHealth: baseHealth - 30, health: baseHealth - 30, attack: baseAttack, fireChance: 0, moveSpeed: 0.7, symbol: '🧙‍♀️', spellCooldown: 3, spells: ['fireball', 'slow'], resistance: 'fire' }
+                { type: 'grunt', maxHealth: baseHealth, health: baseHealth, attack: baseAttack, fireChance: 0.05, moveSpeed: 1.0, symbol: '👾', resistance: 'fire' },
+                { type: 'sniper', maxHealth: baseHealth - 10, health: baseHealth - 10, attack: baseAttack + 2, fireChance: 0.1, moveSpeed: 1.7, symbol: '🧟', resistance: 'ice' },
+                { type: 'tank', maxHealth: baseHealth + 20, health: baseHealth + 20, attack: baseAttack + 3, fireChance: 0, moveSpeed: 2, symbol: '👹', resistance: 'lightning' },
+                { type: 'summoner', maxHealth: baseHealth - 20, health: baseHealth - 20, attack: baseAttack - 2, fireChance: 0, moveSpeed: 2.5, symbol: '🧙‍♂️', summonCooldown: 5, resistance: 'earth' },
+                { type: 'mage', maxHealth: baseHealth - 30, health: baseHealth - 30, attack: baseAttack, fireChance: 0, moveSpeed: 1.7, symbol: '🧙‍♀️', spellCooldown: 3, spells: ['fireball', 'slow'], resistance: 'fire' }
             ];
             const enemyList = [];
             const enemyCount = Math.min(3 + Math.floor(stage / 2), 10);
