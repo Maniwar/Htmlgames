@@ -145,6 +145,9 @@
             display: none;
             font-family: Arial, sans-serif;
         }
+        #toggleEffects {
+            margin-top: 10px;
+        }
     </style>
 </head>
 <body>
@@ -172,6 +175,7 @@
             </div>
         </div>
         <button id="toggleInventory">Inventory</button>
+        <button id="toggleEffects">Toggle Effects</button>
         <div id="inventory">
             <h3>Equipped:</h3>
             <p id="inventoryEquippedSpell">Spell: None</p>
@@ -196,40 +200,27 @@
     <script>
         // Game Configuration Object for Speed Adjustments
         const GAME_CONFIG = {
-            // Player movement cooldowns in seconds (lower is faster)
             PLAYER_BASE_MOVE_COOLDOWN: 0.1,
             PLAYER_SPEED_BOOST_MOVE_COOLDOWN: 0.05,
             PLAYER_SLOW_MOVE_COOLDOWN: 0.2,
-            
-            // Player firing rates in seconds (higher is slower)
             PLAYER_DEFAULT_FIRE_RATE: 0.5,
             PLAYER_MIN_FIRE_RATE: 0.1,
-            
-            // Projectile speeds (cells per second)
             PLAYER_PROJECTILE_SPEED: 5,
             ENEMY_PROJECTILE_SPEED: 5,
-            
-            // Enemy firing cooldown in seconds (higher is slower)
             ENEMY_FIRE_COOLDOWN: 1,
             ENEMY_FIRE_CHANCE_VARIATION: 0.05,
-            
-            // Enemy movement cooldowns in seconds (higher is slower)
             ENEMY_GRUNT_MOVE_SPEED: 1.0,
             ENEMY_SNIPER_MOVE_SPEED: 2.7,
             ENEMY_TANK_MOVE_SPEED: 3.0,
             ENEMY_SUMMONER_MOVE_SPEED: 4.5,
             ENEMY_MAGE_MOVE_SPEED: 2.7,
             ENEMY_SUMMONED_GRUNT_MOVE_SPEED: 0.5,
-            
-            // Base fire chances for enemies (probability per frame)
             ENEMY_GRUNT_FIRE_CHANCE: 0.05,
             ENEMY_SNIPER_FIRE_CHANCE: 0.1,
             ENEMY_TANK_FIRE_CHANCE: 0,
             ENEMY_SUMMONER_FIRE_CHANCE: 0,
             ENEMY_MAGE_FIRE_CHANCE: 0,
             ENEMY_SUMMONED_GRUNT_FIRE_CHANCE: 0.05,
-            
-            // Enemy special cooldowns in seconds
             ENEMY_MAGE_SPELL_COOLDOWN: 3,
             ENEMY_SUMMONER_SUMMON_COOLDOWN: 5
         };
@@ -258,6 +249,7 @@
         const STUN_DURATION = 2;
 
         let hasEquippedSpell = false;
+        let enhancedEffectsEnabled = true; // Toggle for enhanced effects
 
         function resizeCanvas() {
             const displaySize = Math.min(window.innerWidth, window.innerHeight) * 0.8;
@@ -540,7 +532,11 @@
             target.y = y;
         }
 
-        function createParticles(x, y, count, color, speed, life) {
+        function createParticles(x, y, count, color, speed, life, type = 'default', emoji = null) {
+            if (!enhancedEffectsEnabled) {
+                type = 'default';
+                emoji = null;
+            }
             if (particles.length + count > MAX_PARTICLES) {
                 particles.splice(0, particles.length + count - MAX_PARTICLES);
             }
@@ -552,23 +548,30 @@
                     y: y * cellSize + cellSize / 2,
                     dx: Math.cos(angle) * velocity,
                     dy: Math.sin(angle) * velocity,
-                    life: life,
+                    life,
                     maxLife: life,
-                    color: color,
-                    size: Math.random() * 3 + 1
+                    color,
+                    size: Math.random() * 3 + 1,
+                    type,
+                    emoji
                 });
             }
         }
 
         function createHealParticles(x, y) {
-            createParticles(x, y, 20, 'lime', 1, 1);
+            const type = enhancedEffectsEnabled ? 'emoji' : 'default';
+            const emoji = enhancedEffectsEnabled ? '💖' : null;
+            createParticles(x, y, 20, 'lime', 1, 1, type, emoji);
             particles.slice(-20).forEach(p => p.dy -= 1);
         }
 
         function createExplosionParticles(x, y, damage) {
             const size = getArrowSize(damage);
-            createParticles(x, y, 30 * size, 'yellow', 5, 0.3);
-            createParticles(x, y, 20 * size, 'orange', 3, 0.5);
+            const type = enhancedEffectsEnabled ? 'emoji' : 'default';
+            const emoji1 = enhancedEffectsEnabled ? '💥' : null;
+            const emoji2 = enhancedEffectsEnabled ? '🔥' : null;
+            createParticles(x, y, 30 * size, 'yellow', 5, 0.3, type, emoji1);
+            createParticles(x, y, 20 * size, 'orange', 3, 0.5, type, emoji2);
         }
 
         function updateParticles(deltaTime) {
@@ -584,10 +587,17 @@
         function drawParticles() {
             particles.forEach(p => {
                 ctx.globalAlpha = p.life / p.maxLife;
-                ctx.fillStyle = p.color;
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-                ctx.fill();
+                if (p.type === 'emoji' && enhancedEffectsEnabled && p.emoji) {
+                    ctx.font = `${p.size * 10}px Arial`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(p.emoji, p.x, p.y);
+                } else {
+                    ctx.fillStyle = p.color;
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fill();
+                }
             });
             ctx.globalAlpha = 1;
         }
@@ -596,7 +606,9 @@
             countdownActive = true;
             countdownTimer = 3.5;
             countdownText = '3';
-            createParticles(mapSize / 2, mapSize / 2, 50, 'red', 2, 1);
+            const type = enhancedEffectsEnabled ? 'emoji' : 'default';
+            const emoji = enhancedEffectsEnabled ? '3️⃣' : null;
+            createParticles(mapSize / 2, mapSize / 2, 50, 'red', 2, 1, type, emoji);
         }
 
         function updateCountdown(deltaTime) {
@@ -607,17 +619,23 @@
             } else if (countdownTimer <= 0.5) {
                 if (countdownText !== 'GO!') {
                     countdownText = 'GO!';
-                    createParticles(mapSize / 2, mapSize / 2, 50, 'blue', 3, 1);
+                    const type = enhancedEffectsEnabled ? 'emoji' : 'default';
+                    const emoji = enhancedEffectsEnabled ? '🏁' : null;
+                    createParticles(mapSize / 2, mapSize / 2, 50, 'blue', 3, 1, type, emoji);
                 }
             } else if (countdownTimer <= 1.5) {
                 if (countdownText !== '1') {
                     countdownText = '1';
-                    createParticles(mapSize / 2, mapSize / 2, 50, 'green', 2, 1);
+                    const type = enhancedEffectsEnabled ? 'emoji' : 'default';
+                    const emoji = enhancedEffectsEnabled ? '1️⃣' : null;
+                    createParticles(mapSize / 2, mapSize / 2, 50, 'green', 2, 1, type, emoji);
                 }
             } else if (countdownTimer <= 2.5) {
                 if (countdownText !== '2') {
                     countdownText = '2';
-                    createParticles(mapSize / 2, mapSize / 2, 50, 'yellow', 2, 1);
+                    const type = enhancedEffectsEnabled ? 'emoji' : 'default';
+                    const emoji = enhancedEffectsEnabled ? '2️⃣' : null;
+                    createParticles(mapSize / 2, mapSize / 2, 50, 'yellow', 2, 1, type, emoji);
                 }
             }
         }
@@ -760,14 +778,20 @@
                 ctx.fill();
                 ctx.globalAlpha = 1;
 
-                if (arrow.element === 'fire') {
-                    createParticles(arrow.x, arrow.y, 1, 'red', 0.5, 0.1);
-                } else if (arrow.element === 'ice') {
-                    createParticles(arrow.x, arrow.y, 1, 'blue', 0.5, 0.1);
-                } else if (arrow.element === 'lightning') {
-                    createParticles(arrow.x, arrow.y, 1, 'yellow', 1, 0.05);
-                } else if (arrow.element === 'earth') {
-                    createParticles(arrow.x, arrow.y, 1, 'brown', 0.5, 0.1);
+                if (enhancedEffectsEnabled) {
+                    if (arrow.element === 'fire') {
+                        createParticles(arrow.x, arrow.y, 1, 'red', 0.5, 0.1, 'emoji', '🔥');
+                    } else if (arrow.element === 'ice') {
+                        createParticles(arrow.x, arrow.y, 1, 'blue', 0.5, 0.1, 'emoji', '❄️');
+                    } else if (arrow.element === 'lightning') {
+                        createParticles(arrow.x, arrow.y, 1, 'yellow', 1, 0.05, 'emoji', '⚡');
+                    } else if (arrow.element === 'earth') {
+                        createParticles(arrow.x, arrow.y, 1, 'brown', 0.5, 0.1, 'emoji', '🪨');
+                    } else {
+                        createParticles(arrow.x, arrow.y, 1, arrow.color, 0.5, 0.1, 'emoji', '✨');
+                    }
+                } else {
+                    createParticles(arrow.x, arrow.y, 1, arrow.color, 0.5, 0.1);
                 }
             });
         }
@@ -820,7 +844,9 @@
                         player.inventory.push(item);
                     }
                     loot.splice(lootIndex, 1);
-                    createParticles(player.x, player.y, 10, 'gold', 2, 0.5);
+                    const type = enhancedEffectsEnabled ? 'emoji' : 'default';
+                    const emoji = enhancedEffectsEnabled ? '💰' : null;
+                    createParticles(player.x, player.y, 10, 'gold', 2, 0.5, type, emoji);
                     updateQuickAccessDisplay();
                     updateSpellQuickAccessDisplay();
                     updateInventoryDisplay();
@@ -896,12 +922,12 @@
                 x: x + 0.5, y: y + 0.5, dx, dy, isPlayer, damage, size, isCritical,
                 isAoE: isPlayer && (spell ? spell.isAoE : false) || (player.explosiveArrowsTimer > 0),
                 isPoison: isPlayer && spell && spell.poisonChance && Math.random() < spell.poisonChance,
-                chargeColor: chargeColor,
+                chargeColor,
                 color: isPlayer ? (spell ? spellColors[spell.name] || 'blue' : 'blue') : 'red',
                 element: isPlayer && spell ? spell.element : null,
                 effect: isPlayer && spell ? spell.effect : null,
                 effectStrength: multiplier,
-                speed: speed
+                speed
             };
             if (spell && spell.spread && isPlayer && arrows.length + 2 < MAX_ARROWS) {
                 arrows.push({ ...arrow, dx: dx + 0.1 });
@@ -915,7 +941,29 @@
                 player.fireCooldown = Math.max(GAME_CONFIG.PLAYER_MIN_FIRE_RATE, spell ? spell.fireRate : GAME_CONFIG.PLAYER_DEFAULT_FIRE_RATE);
                 const particleCount = Math.min(20, 5 + Math.floor(chargeTime * 5));
                 const color = spell ? (spellColors[spell.name] || 'blue') : 'blue';
-                createParticles(player.x, player.y, particleCount, color, 1, 0.1);
+                const type = enhancedEffectsEnabled ? 'emoji' : 'default';
+                const emoji = enhancedEffectsEnabled ? (spell ? {
+                    'Magic Missile': '✨',
+                    'Arcane Bolt': '💫',
+                    'Scatter Spell': '🌟',
+                    'Fireball': '🔥',
+                    'Ice Shard': '❄️',
+                    'Lightning Bolt': '⚡',
+                    'Earthquake': '🌋',
+                    'Disintegrate': '☄️',
+                    'Arcane Barrage': '🌠',
+                    'Triple Magic Missile': '✨',
+                    'Triple Arcane Bolt': '💫',
+                    'Triple Scatter Spell': '🌟',
+                    'Triple Fireball': '🔥',
+                    'Triple Ice Shard': '❄️',
+                    'Triple Lightning Bolt': '⚡',
+                    'Triple Earthquake': '🌋',
+                    'Triple Disintegrate': '☄️',
+                    'Triple Arcane Barrage': '🌠',
+                    'Combined Spell': '🌌'
+                }[spell.name] : '✨') : null;
+                createParticles(player.x, player.y, particleCount, color, 1, 0.1, type, emoji);
             }
         }
 
@@ -972,7 +1020,9 @@
                                     player.xp += 50;
                                     checkLevelUp();
                                     updateInfo();
-                                    createParticles(enemy.x, enemy.y, 20, 'red', 3, 0.5);
+                                    const type = enhancedEffectsEnabled ? 'emoji' : 'default';
+                                    const emoji = enhancedEffectsEnabled ? '💀' : null;
+                                    createParticles(enemy.x, enemy.y, 20, 'red', 3, 0.5, type, emoji);
                                     dropLoot(enemy.x, enemy.y);
                                     enemies.splice(i, 1);
                                     i--;
@@ -994,7 +1044,9 @@
                 player.health = player.maxHealth;
                 player.attack += 5;
                 showNotification(`Level Up! Level ${player.level}. Max Health: ${player.maxHealth}, Attack: ${player.attack}`);
-                createParticles(player.x, player.y, 30, 'gold', 2, 1);
+                const type = enhancedEffectsEnabled ? 'emoji' : 'default';
+                const emoji = enhancedEffectsEnabled ? '🎉' : null;
+                createParticles(player.x, player.y, 30, 'gold', 2, 1, type, emoji);
                 updateInfo();
             }
         }
@@ -1074,21 +1126,27 @@
                                 player.xp += 50;
                                 checkLevelUp();
                                 updateInfo();
-                                createParticles(enemy.x, enemy.y, 20, 'red', 3, 0.5);
+                                const type = enhancedEffectsEnabled ? 'emoji' : 'default';
+                                const emoji = enhancedEffectsEnabled ? '💀' : null;
+                                createParticles(enemy.x, enemy.y, 20, 'red', 3, 0.5, type, emoji);
                                 dropLoot(enemy.x, enemy.y);
                                 enemies.splice(i, 1);
                                 i--;
                                 break;
                             }
                         }
-                        createParticles(enemy.x, enemy.y, 1, 'orange', 0.5, 0.1);
+                        const type = enhancedEffectsEnabled ? 'emoji' : 'default';
+                        const emoji = enhancedEffectsEnabled ? '🔥' : null;
+                        createParticles(enemy.x, enemy.y, 1, 'orange', 0.5, 0.1, type, emoji);
                     }
 
                     if (enemy.slowTimer > 0) {
                         enemy.slowTimer -= deltaTime;
                         if (enemy.slowTimer < 0) enemy.slowTimer = 0;
                         enemy.moveCooldown += deltaTime * (1 / SLOW_FACTOR - 1);
-                        createParticles(enemy.x, enemy.y, 1, 'blue', 0.5, 0.1);
+                        const type = enhancedEffectsEnabled ? 'emoji' : 'default';
+                        const emoji = enhancedEffectsEnabled ? '❄️' : null;
+                        createParticles(enemy.x, enemy.y, 1, 'blue', 0.5, 0.1, type, emoji);
                     }
 
                     if (enemy.stunTimer > 0) {
@@ -1096,7 +1154,9 @@
                         if (enemy.stunTimer < 0) enemy.stunTimer = 0;
                         enemy.moveCooldown = Math.max(enemy.moveCooldown, 0.1);
                         enemy.fireCooldown = Math.max(enemy.fireCooldown, 0.1);
-                        createParticles(enemy.x, enemy.y, 1, 'yellow', 1, 0.05);
+                        const type = enhancedEffectsEnabled ? 'emoji' : 'default';
+                        const emoji = enhancedEffectsEnabled ? '⚡' : null;
+                        createParticles(enemy.x, enemy.y, 1, 'yellow', 1, 0.05, type, emoji);
                     }
 
                     if (enemy.type === 'summoner' && enemy.stunTimer <= 0) {
@@ -1134,7 +1194,9 @@
                                 };
                                 enemies.push(newEnemy);
                                 enemy.summonCooldown = GAME_CONFIG.ENEMY_SUMMONER_SUMMON_COOLDOWN;
-                                createParticles(spot.x, spot.y, 15, 'purple', 2, 0.5);
+                                const type = enhancedEffectsEnabled ? 'emoji' : 'default';
+                                const emoji = enhancedEffectsEnabled ? '🧙‍♂️' : null;
+                                createParticles(spot.x, spot.y, 15, 'purple', 2, 0.5, type, emoji);
                             }
                         }
                     }
@@ -1149,7 +1211,9 @@
                                 createExplosionParticles(player.x, player.y, 10);
                             } else if (spell === 'slow') {
                                 player.slowTimer = 5;
-                                createParticles(player.x, player.y, 15, 'gray', 1, 1);
+                                const type = enhancedEffectsEnabled ? 'emoji' : 'default';
+                                const emoji = enhancedEffectsEnabled ? '❄️' : null;
+                                createParticles(player.x, player.y, 15, 'gray', 1, 1, type, emoji);
                             }
                             enemy.spellCooldown = GAME_CONFIG.ENEMY_MAGE_SPELL_COOLDOWN;
                         }
@@ -1182,7 +1246,9 @@
                         if (enemy.poisonTimer < 0) enemy.poisonTimer = 0;
                         enemy.poisonParticleTimer -= deltaTime;
                         if (enemy.poisonParticleTimer <= 0) {
-                            createParticles(enemy.x, enemy.y, 3, 'green', 0.5, 0.2);
+                            const type = enhancedEffectsEnabled ? 'emoji' : 'default';
+                            const emoji = enhancedEffectsEnabled ? '💀' : null;
+                            createParticles(enemy.x, enemy.y, 3, 'green', 0.5, 0.2, type, emoji);
                             enemy.poisonParticleTimer = 0.1;
                         }
                         enemy.poisonAccumulator += deltaTime;
@@ -1194,7 +1260,9 @@
                                 player.xp += 50;
                                 checkLevelUp();
                                 updateInfo();
-                                createParticles(enemy.x, enemy.y, 20, 'red', 3, 0.5);
+                                const type = enhancedEffectsEnabled ? 'emoji' : 'default';
+                                const emoji = enhancedEffectsEnabled ? '💀' : null;
+                                createParticles(enemy.x, enemy.y, 20, 'red', 3, 0.5, type, emoji);
                                 dropLoot(enemy.x, enemy.y);
                                 enemies.splice(i, 1);
                                 i--;
@@ -1217,11 +1285,9 @@
                         applyAoEDamage(cellX, cellY, arrow.damage);
                         createExplosionParticles(cellX, cellY, arrow.damage);
                     } else {
-                        if (arrow.element === 'fire') createParticles(cellX, cellY, 20, 'red', 2, 0.5);
-                        else if (arrow.element === 'ice') createParticles(cellX, cellY, 20, 'blue', 2, 0.5);
-                        else if (arrow.element === 'lightning') createParticles(cellX, cellY, 20, 'yellow', 3, 0.3);
-                        else if (arrow.element === 'earth') createParticles(cellX, cellY, 20, 'brown', 2, 0.5);
-                        else createParticles(cellX, cellY, 10 * arrow.size, arrow.color, 2, 0.3);
+                        const type = enhancedEffectsEnabled ? 'emoji' : 'default';
+                        const emoji = enhancedEffectsEnabled ? (arrow.element === 'fire' ? '🔥' : arrow.element === 'ice' ? '❄️' : arrow.element === 'lightning' ? '⚡' : arrow.element === 'earth' ? '🪨' : '✨') : null;
+                        createParticles(cellX, cellY, 10 * arrow.size, arrow.color, 2, 0.3, type, emoji);
                     }
                     arrows.splice(i, 1);
                 } else if (arrow.isPlayer) {
@@ -1245,11 +1311,9 @@
                                 } else {
                                     addDamagePopup(enemy.x, enemy.y, finalDamage);
                                 }
-                                if (arrow.element === 'fire') createParticles(enemy.x, enemy.y, 20, 'red', 2, 0.5);
-                                else if (arrow.element === 'ice') createParticles(enemy.x, enemy.y, 20, 'blue', 2, 0.5);
-                                else if (arrow.element === 'lightning') createParticles(enemy.x, enemy.y, 20, 'yellow', 3, 0.3);
-                                else if (arrow.element === 'earth') createParticles(enemy.x, enemy.y, 20, 'brown', 2, 0.5);
-                                else createParticles(enemy.x, enemy.y, 15 * arrow.size, arrow.color, 2, 0.4);
+                                const type = enhancedEffectsEnabled ? 'emoji' : 'default';
+                                const emoji = enhancedEffectsEnabled ? (arrow.element === 'fire' ? '🔥' : arrow.element === 'ice' ? '❄️' : arrow.element === 'lightning' ? '⚡' : arrow.element === 'earth' ? '🪨' : '✨') : null;
+                                createParticles(enemy.x, enemy.y, 15 * arrow.size, arrow.color, 2, 0.4, type, emoji);
                                 if (arrow.isPoison) {
                                     enemy.poisonTimer = POISON_DURATION;
                                     enemy.poisonAccumulator = 0;
@@ -1267,7 +1331,9 @@
                                     player.xp += 50;
                                     checkLevelUp();
                                     updateInfo();
-                                    createParticles(enemy.x, enemy.y, 20, 'red', 3, 0.5);
+                                    const deathType = enhancedEffectsEnabled ? 'emoji' : 'default';
+                                    const deathEmoji = enhancedEffectsEnabled ? '💀' : null;
+                                    createParticles(enemy.x, enemy.y, 20, 'red', 3, 0.5, deathType, deathEmoji);
                                     dropLoot(enemy.x, enemy.y);
                                     enemies.splice(j, 1);
                                     j--;
@@ -1283,7 +1349,9 @@
                         arrow.dx = -arrow.dx;
                         arrow.dy = -arrow.dy;
                         arrow.isPlayer = false;
-                        createParticles(player.x, player.y, 10 * arrow.size, 'blue', 2, 0.3);
+                        const type = enhancedEffectsEnabled ? 'emoji' : 'default';
+                        const emoji = enhancedEffectsEnabled ? '🛡️' : null;
+                        createParticles(player.x, player.y, 10 * arrow.size, 'blue', 2, 0.3, type, emoji);
                         if (arrows.length + 4 < MAX_ARROWS) {
                             fireArrow(player.x, player.y, 0, -1, true);
                             fireArrow(player.x, player.y, 0, 1, true);
@@ -1299,7 +1367,9 @@
                         } else {
                             addDamagePopup(player.x, player.y, Math.max(damage, 0));
                         }
-                        createParticles(player.x, player.y, 10 * arrow.size, arrow.color, 2, 0.3);
+                        const type = enhancedEffectsEnabled ? 'emoji' : 'default';
+                        const emoji = enhancedEffectsEnabled ? '💥' : null;
+                        createParticles(player.x, player.y, 10 * arrow.size, arrow.color, 2, 0.3, type, emoji);
                         if (player.health <= 0) gameOver();
                         arrows.splice(i, 1);
                     }
@@ -1338,7 +1408,9 @@
         function addCriticalDamagePopup(x, y, damage) {
             const roundedDamage = damage.toFixed(2);
             popups.push({ text: `CRIT! -${roundedDamage}`, x, y, life: 1.5, maxLife: 1.5, isCritical: true });
-            createParticles(x, y, 20, 'gold', 3, 0.5);
+            const type = enhancedEffectsEnabled ? 'emoji' : 'default';
+            const emoji = enhancedEffectsEnabled ? '🌟' : null;
+            createParticles(x, y, 20, 'gold', 3, 0.5, type, emoji);
         }
 
         function addExplosion(x, y, isPlayer) {
@@ -1350,7 +1422,9 @@
             player.x = 1;
             player.y = 1;
             showNotification("You died! Respawned with half health.");
-            createParticles(player.x, player.y, 20, 'purple', 2, 0.5);
+            const type = enhancedEffectsEnabled ? 'emoji' : 'default';
+            const emoji = enhancedEffectsEnabled ? '💀' : null;
+            createParticles(player.x, player.y, 20, 'purple', 2, 0.5, type, emoji);
             updateInfo();
         }
 
@@ -1364,7 +1438,9 @@
             exitUnlocked = false;
             hasDroppedThisStage = false;
             currentTileSet = tileSets[(stage - 1) % tileSets.length];
-            createParticles(player.x, player.y, 30, 'green', 3, 0.7);
+            const type = enhancedEffectsEnabled ? 'emoji' : 'default';
+            const emoji = enhancedEffectsEnabled ? '🌟' : null;
+            createParticles(player.x, player.y, 30, 'green', 3, 0.7, type, emoji);
             updateInfo();
             showNotification(`Welcome to Stage ${stage}!`);
             startCountdown();
@@ -1483,6 +1559,19 @@
             } else if (item.effect) {
                 item.effect(player);
                 player.inventory.splice(index, 1);
+                const type = enhancedEffectsEnabled ? 'emoji' : 'default';
+                const emoji = enhancedEffectsEnabled ? {
+                    'speed': '🏃',
+                    'damage': '💪',
+                    'shield': '🛡️',
+                    'teleport': '🔮',
+                    'timeFreeze': '⏳',
+                    'invisibility': '👻',
+                    'doubleArrow': '🏹',
+                    'healthRegen': '💖',
+                    'explosiveArrows': '💣'
+                }[item.type] || '✨' : null;
+                createParticles(player.x, player.y, 20, 'gold', 2, 0.5, type, emoji);
             }
             updateInventoryDisplay();
             updateSpellQuickAccessDisplay();
@@ -1537,6 +1626,19 @@
                 } else if (item.effect) {
                     item.effect(player);
                     player.quickAccess[slotIndex] = null;
+                    const type = enhancedEffectsEnabled ? 'emoji' : 'default';
+                    const emoji = enhancedEffectsEnabled ? {
+                        'speed': '🏃',
+                        'damage': '💪',
+                        'shield': '🛡️',
+                        'teleport': '🔮',
+                        'timeFreeze': '⏳',
+                        'invisibility': '👻',
+                        'doubleArrow': '🏹',
+                        'healthRegen': '💖',
+                        'explosiveArrows': '💣'
+                    }[item.type] || '✨' : null;
+                    createParticles(player.x, player.y, 20, 'gold', 2, 0.5, type, emoji);
                 }
                 updateQuickAccessDisplay();
             }
@@ -1606,6 +1708,11 @@
             notification.style.display = 'block';
             setTimeout(() => notification.style.display = 'none', 2000);
         }
+
+        document.getElementById('toggleEffects').addEventListener('click', () => {
+            enhancedEffectsEnabled = !enhancedEffectsEnabled;
+            showNotification(`Enhanced Effects: ${enhancedEffectsEnabled ? 'Enabled' : 'Disabled'}`);
+        });
 
         document.getElementById('moveUp').addEventListener('pointerdown', () => movingUp = true);
         document.getElementById('moveUp').addEventListener('pointerup', () => movingUp = false);
