@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>Dungeon Crawler - Mage Quest</title>
     <style>
         body {
@@ -21,6 +21,7 @@
             align-items: center;
             width: 100%;
             max-width: 800px;
+            padding-bottom: 20px; /* Base padding */
         }
         #gameCanvas {
             border: 1px solid #000;
@@ -58,6 +59,15 @@
             justify-content: center;
             align-items: center;
             cursor: pointer;
+            touch-action: none; /* Prevent zooming */
+            user-select: none; /* Prevent text selection */
+            -webkit-user-select: none; /* For Safari */
+            -moz-user-select: none;    /* For Firefox */
+            -ms-user-select: none;     /* For IE/Edge */
+        }
+        .dpad button.pressed {
+            background-color: #aaa;
+            transform: scale(0.9);
         }
         .up { top: 0; left: 50%; transform: translateX(-50%); }
         .left { top: 50%; left: 0; transform: translateY(-50%); }
@@ -147,6 +157,39 @@
         }
         #toggleEffects {
             margin-top: 10px;
+        }
+        @media (max-width: 600px) {
+            #controls {
+                position: fixed;
+                bottom: 0;
+                left: 0;
+                right: 0;
+                display: flex;
+                justify-content: space-around;
+                background: rgba(0, 0, 0, 0.5);
+                padding: 10px;
+                z-index: 10;
+            }
+            .dpad {
+                width: 40vw;
+                height: 40vw;
+                max-width: 160px;
+                max-height: 160px;
+            }
+            .dpad button {
+                width: 12vw;
+                height: 12vw;
+                max-width: 48px;
+                max-height: 48px;
+                font-size: 24px;
+            }
+            #gameContainer {
+                padding-bottom: 180px; /* Space for fixed controls */
+            }
+            #quickAccessBar, #spellQuickBar {
+                max-width: 100%;
+                width: auto;
+            }
         }
     </style>
 </head>
@@ -287,7 +330,12 @@
         let arrows = [];
         let popups = [];
         let particles = [];
-        let movingUp = false, movingLeft = false, movingRight = false, movingDown = false;
+        let movementStates = {
+            movingUp: false,
+            movingLeft: false,
+            movingRight: false,
+            movingDown: false
+        };
         let exitUnlocked = false;
         let lastTimestamp = 0;
         let hasDroppedThisStage = false;
@@ -486,7 +534,6 @@
                     burnAccumulator: 0,
                     slowTimer: 0,
                     stunTimer: 0,
-                    // Fusion properties
                     isFused: false,
                     fusionTimer: 0,
                     fusionPartner: null
@@ -1172,11 +1219,11 @@
             }
 
             const moveCooldown = player.speedBoostTimer > 0 ? GAME_CONFIG.PLAYER_SPEED_BOOST_MOVE_COOLDOWN : (player.slowTimer > 0 ? GAME_CONFIG.PLAYER_SLOW_MOVE_COOLDOWN : GAME_CONFIG.PLAYER_BASE_MOVE_COOLDOWN);
-            if (player.moveCooldown <= 0 && (movingUp || movingLeft || movingRight || movingDown)) {
-                if (movingUp) movePlayer(0, -1);
-                else if (movingDown) movePlayer(0, 1);
-                else if (movingLeft) movePlayer(-1, 0);
-                else if (movingRight) movePlayer(1, 0);
+            if (player.moveCooldown <= 0 && (movementStates.movingUp || movementStates.movingLeft || movementStates.movingRight || movementStates.movingDown)) {
+                if (movementStates.movingUp) movePlayer(0, -1);
+                else if (movementStates.movingDown) movePlayer(0, 1);
+                else if (movementStates.movingLeft) movePlayer(-1, 0);
+                else if (movementStates.movingRight) movePlayer(1, 0);
                 player.moveCooldown = moveCooldown;
             }
 
@@ -1848,85 +1895,76 @@
             showNotification(`Enhanced Effects: ${enhancedEffectsEnabled ? 'Enabled' : 'Disabled'}`);
         });
 
-        document.getElementById('moveUp').addEventListener('pointerdown', () => movingUp = true);
-        document.getElementById('moveUp').addEventListener('pointerup', () => movingUp = false);
-        document.getElementById('moveLeft').addEventListener('pointerdown', () => movingLeft = true);
-        document.getElementById('moveLeft').addEventListener('pointerup', () => movingLeft = false);
-        document.getElementById('moveRight').addEventListener('pointerdown', () => movingRight = true);
-        document.getElementById('moveRight').addEventListener('pointerup', () => movingRight = false);
-        document.getElementById('moveDown').addEventListener('pointerdown', () => movingDown = true);
-        document.getElementById('moveDown').addEventListener('pointerup', () => movingDown = false);
+        // Movement Button Event Listeners
+        const movementMap = {
+            'moveUp': 'movingUp',
+            'moveLeft': 'movingLeft',
+            'moveRight': 'movingRight',
+            'moveDown': 'movingDown'
+        };
+
+        Object.entries(movementMap).forEach(([id, varName]) => {
+            const button = document.getElementById(id);
+            button.addEventListener('pointerdown', (e) => {
+                e.preventDefault();
+                e.target.classList.add('pressed');
+                movementStates[varName] = true;
+            });
+            button.addEventListener('pointerup', (e) => {
+                e.target.classList.remove('pressed');
+                movementStates[varName] = false;
+            });
+            button.addEventListener('pointerout', (e) => {
+                e.target.classList.remove('pressed');
+                movementStates[varName] = false;
+            });
+        });
+
+        // Firing Button Event Listeners
+        const firingButtons = [
+            { id: 'fireUp', dx: 0, dy: -1, dir: 'up' },
+            { id: 'fireLeft', dx: -1, dy: 0, dir: 'left' },
+            { id: 'fireRight', dx: 1, dy: 0, dir: 'right' },
+            { id: 'fireDown', dx: 0, dy: 1, dir: 'down' }
+        ];
+
+        firingButtons.forEach(({ id, dx, dy, dir }) => {
+            const button = document.getElementById(id);
+            button.addEventListener('pointerdown', (e) => {
+                e.preventDefault();
+                button.setPointerCapture(e.pointerId); // Capture the pointer for reliable release detection
+                e.target.classList.add('pressed');
+                if (player.fireCooldown <= 0 && !player.charging[dir]) {
+                    player.charging[dir] = true;
+                    player.chargeStartTime[dir] = performance.now();
+                }
+            });
+            button.addEventListener('pointerup', (e) => {
+                e.preventDefault();
+                e.target.classList.remove('pressed');
+                if (player.charging[dir]) {
+                    const chargeTime = (performance.now() - player.chargeStartTime[dir]) / 1000;
+                    fireArrow(player.x, player.y, dx, dy, true, null, chargeTime);
+                    player.charging[dir] = false;
+                }
+            });
+            button.addEventListener('pointerout', (e) => {
+                e.target.classList.remove('pressed');
+            });
+        });
 
         document.addEventListener('pointerup', () => {
-            movingUp = movingLeft = movingRight = movingDown = false;
-        });
-
-        document.getElementById('fireUp').addEventListener('pointerdown', (e) => {
-            e.preventDefault();
-            if (player.fireCooldown <= 0 && !player.charging.up) {
-                player.charging.up = true;
-                player.chargeStartTime.up = performance.now();
-            }
-        });
-        document.getElementById('fireUp').addEventListener('pointerup', (e) => {
-            e.preventDefault();
-            if (player.charging.up) {
-                const chargeTime = (performance.now() - player.chargeStartTime.up) / 1000;
-                fireArrow(player.x, player.y, 0, -1, true, null, chargeTime);
-                player.charging.up = false;
-            }
-        });
-        document.getElementById('fireLeft').addEventListener('pointerdown', (e) => {
-            e.preventDefault();
-            if (player.fireCooldown <= 0 && !player.charging.left) {
-                player.charging.left = true;
-                player.chargeStartTime.left = performance.now();
-            }
-        });
-        document.getElementById('fireLeft').addEventListener('pointerup', (e) => {
-            e.preventDefault();
-            if (player.charging.left) {
-                const chargeTime = (performance.now() - player.chargeStartTime.left) / 1000;
-                fireArrow(player.x, player.y, -1, 0, true, null, chargeTime);
-                player.charging.left = false;
-            }
-        });
-        document.getElementById('fireRight').addEventListener('pointerdown', (e) => {
-            e.preventDefault();
-            if (player.fireCooldown <= 0 && !player.charging.right) {
-                player.charging.right = true;
-                player.chargeStartTime.right = performance.now();
-            }
-        });
-        document.getElementById('fireRight').addEventListener('pointerup', (e) => {
-            e.preventDefault();
-            if (player.charging.right) {
-                const chargeTime = (performance.now() - player.chargeStartTime.right) / 1000;
-                fireArrow(player.x, player.y, 1, 0, true, null, chargeTime);
-                player.charging.right = false;
-            }
-        });
-        document.getElementById('fireDown').addEventListener('pointerdown', (e) => {
-            e.preventDefault();
-            if (player.fireCooldown <= 0 && !player.charging.down) {
-                player.charging.down = true;
-                player.chargeStartTime.down = performance.now();
-            }
-        });
-        document.getElementById('fireDown').addEventListener('pointerup', (e) => {
-            e.preventDefault();
-            if (player.charging.down) {
-                const chargeTime = (performance.now() - player.chargeStartTime.down) / 1000;
-                fireArrow(player.x, player.y, 0, 1, true, null, chargeTime);
-                player.charging.down = false;
-            }
+            movementStates.movingUp = false;
+            movementStates.movingLeft = false;
+            movementStates.movingRight = false;
+            movementStates.movingDown = false;
         });
 
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'w') movingUp = true;
-            if (e.key === 'a') movingLeft = true;
-            if (e.key === 's') movingDown = true;
-            if (e.key === 'd') movingRight = true;
+            if (e.key === 'w') movementStates.movingUp = true;
+            if (e.key === 'a') movementStates.movingLeft = true;
+            if (e.key === 's') movementStates.movingDown = true;
+            if (e.key === 'd') movementStates.movingRight = true;
             if (e.key === 'ArrowUp' && player.fireCooldown <= 0 && !player.charging.up) {
                 player.charging.up = true;
                 player.chargeStartTime.up = performance.now();
@@ -1948,10 +1986,10 @@
         });
 
         document.addEventListener('keyup', (e) => {
-            if (e.key === 'w') movingUp = false;
-            if (e.key === 'a') movingLeft = false;
-            if (e.key === 's') movingDown = false;
-            if (e.key === 'd') movingRight = false;
+            if (e.key === 'w') movementStates.movingUp = false;
+            if (e.key === 'a') movementStates.movingLeft = false;
+            if (e.key === 's') movementStates.movingDown = false;
+            if (e.key === 'd') movementStates.movingRight = false;
             if (e.key === 'ArrowUp' && player.charging.up) {
                 const chargeTime = (performance.now() - player.chargeStartTime.up) / 1000;
                 fireArrow(player.x, player.y, 0, -1, true, null, chargeTime);
