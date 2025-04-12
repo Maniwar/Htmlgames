@@ -502,11 +502,11 @@
             const baseHealth = 300 + (stage - 1) * 10;
             const baseAttack = 5 + Math.floor((stage - 1) / 2);
             const enemyTypes = [
-                { type: 'grunt', maxHealth: baseHealth, health: baseHealth, attack: baseAttack, fireChance: GAME_CONFIG.ENEMY_GRUNT_FIRE_CHANCE, moveSpeed: GAME_CONFIG.ENEMY_GRUNT_MOVE_SPEED, symbol: '👾', resistance: 'fire' },
-                { type: 'sniper', maxHealth: baseHealth - 10, health: baseHealth - 10, attack: baseAttack + 2, fireChance: GAME_CONFIG.ENEMY_SNIPER_FIRE_CHANCE, moveSpeed: GAME_CONFIG.ENEMY_SNIPER_MOVE_SPEED, symbol: '🧟', resistance: 'ice' },
-                { type: 'tank', maxHealth: baseHealth + 20, health: baseHealth + 20, attack: baseAttack + 3, fireChance: GAME_CONFIG.ENEMY_TANK_FIRE_CHANCE, moveSpeed: GAME_CONFIG.ENEMY_TANK_MOVE_SPEED, symbol: '👹', resistance: 'lightning' },
-                { type: 'summoner', maxHealth: baseHealth - 20, health: baseHealth - 20, attack: baseAttack - 2, fireChance: GAME_CONFIG.ENEMY_SUMMONER_FIRE_CHANCE, moveSpeed: GAME_CONFIG.ENEMY_SUMMONER_MOVE_SPEED, symbol: '🧙‍♂️', summonCooldown: GAME_CONFIG.ENEMY_SUMMONER_SUMMON_COOLDOWN, resistance: 'earth' },
-                { type: 'mage', maxHealth: baseHealth - 30, health: baseHealth - 30, attack: baseAttack, fireChance: GAME_CONFIG.ENEMY_MAGE_FIRE_CHANCE, moveSpeed: GAME_CONFIG.ENEMY_MAGE_MOVE_SPEED, symbol: '🧙‍♀️', spellCooldown: GAME_CONFIG.ENEMY_MAGE_SPELL_COOLDOWN, spells: ['fireball', 'slow'], resistance: 'fire' }
+                { type: 'grunt', maxHealth: baseHealth, health: baseHealth, attack: baseAttack, fireChance: GAME_CONFIG.ENEMY_GRUNT_FIRE_CHANCE, moveSpeed: GAME_CONFIG.ENEMY_GRUNT_MOVE_SPEED, symbol: '👾', resistance: 'fire', dodgeChance: 0.1, blockChance: 0.1 },
+                { type: 'sniper', maxHealth: baseHealth - 10, health: baseHealth - 10, attack: baseAttack + 2, fireChance: GAME_CONFIG.ENEMY_SNIPER_FIRE_CHANCE, moveSpeed: GAME_CONFIG.ENEMY_SNIPER_MOVE_SPEED, symbol: '🧟', resistance: 'ice', dodgeChance: 0.3, blockChance: 0.05 },
+                { type: 'tank', maxHealth: baseHealth + 20, health: baseHealth + 20, attack: baseAttack + 3, fireChance: GAME_CONFIG.ENEMY_TANK_FIRE_CHANCE, moveSpeed: GAME_CONFIG.ENEMY_TANK_MOVE_SPEED, symbol: '👹', resistance: 'lightning', dodgeChance: 0.05, blockChance: 0.3 },
+                { type: 'summoner', maxHealth: baseHealth - 20, health: baseHealth - 20, attack: baseAttack - 2, fireChance: GAME_CONFIG.ENEMY_SUMMONER_FIRE_CHANCE, moveSpeed: GAME_CONFIG.ENEMY_SUMMONER_MOVE_SPEED, symbol: '🧙‍♂️', summonCooldown: GAME_CONFIG.ENEMY_SUMMONER_SUMMON_COOLDOWN, resistance: 'earth', dodgeChance: 0.2, blockChance: 0.1 },
+                { type: 'mage', maxHealth: baseHealth - 30, health: baseHealth - 30, attack: baseAttack, fireChance: GAME_CONFIG.ENEMY_MAGE_FIRE_CHANCE, moveSpeed: GAME_CONFIG.ENEMY_MAGE_MOVE_SPEED, symbol: '🧙‍♀️', spellCooldown: GAME_CONFIG.ENEMY_MAGE_SPELL_COOLDOWN, spells: ['fireball', 'slow'], resistance: 'fire', dodgeChance: 0.2, blockChance: 0.1 }
             ];
             const enemyList = [];
             const enemyCount = Math.min(3 + Math.floor(stage / 2), 10);
@@ -536,7 +536,9 @@
                     stunTimer: 0,
                     isFused: false,
                     fusionTimer: 0,
-                    fusionPartner: null
+                    fusionPartner: null,
+                    dodgeChance: type.dodgeChance,
+                    blockChance: type.blockChance
                 };
                 if (type.type === 'summoner') enemy.summonCooldown = type.summonCooldown;
                 if (type.type === 'mage') {
@@ -1176,9 +1178,22 @@
                 burnTimer: 0,
                 burnAccumulator: 0,
                 slowTimer: 0,
-                stunTimer: 0
+                stunTimer: 0,
+                dodgeChance: enemy1.dodgeChance,
+                blockChance: enemy1.blockChance
             };
             return fusedEnemy;
+        }
+
+        function isArrowThreatening(enemy, arrow) {
+            if (!arrow.isPlayer) return false;
+            const dx = enemy.x - arrow.x;
+            const dy = enemy.y - arrow.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            if (distance > 2) return false;
+            const dot = dx * arrow.dx + dy * arrow.dy;
+            if (dot <= 0) return false;
+            return true;
         }
 
         function updateGameState(deltaTime) {
@@ -1276,6 +1291,22 @@
                             }
                         }
 
+                        if (!enemy.isFused && enemy.fusionPartner === null && enemy.bounceTimer <= 0 && enemy.stunTimer <= 0) {
+                            const threateningArrows = arrows.filter(arrow => isArrowThreatening(enemy, arrow));
+                            if (threateningArrows.length > 0 && Math.random() < enemy.dodgeChance) {
+                                const adjacentCells = getAdjacentPositions(enemy.x, enemy.y).filter(pos => currentMap[pos.y][pos.x] === 0 && !enemies.some(e => e.x === pos.x && e.y === pos.y));
+                                if (adjacentCells.length > 0) {
+                                    const dodgeCell = adjacentCells[Math.floor(Math.random() * adjacentCells.length)];
+                                    enemy.x = dodgeCell.x;
+                                    enemy.y = dodgeCell.y;
+                                    enemy.moveCooldown = enemy.moveSpeed;
+                                    const type = enhancedEffectsEnabled ? 'emoji' : 'default';
+                                    const emoji = enhancedEffectsEnabled ? '💨' : null;
+                                    createParticles(enemy.x, enemy.y, 10, 'white', 2, 0.3, type, emoji);
+                                }
+                            }
+                        }
+
                         if (enemy.burnTimer > 0) {
                             enemy.burnTimer -= deltaTime;
                             if (enemy.burnTimer < 0) enemy.burnTimer = 0;
@@ -1359,7 +1390,9 @@
                                         stunTimer: 0,
                                         isFused: false,
                                         fusionTimer: 0,
-                                        fusionPartner: null
+                                        fusionPartner: null,
+                                        dodgeChance: 0.1,
+                                        blockChance: 0.1
                                     };
                                     enemies.push(newEnemy);
                                     enemy.summonCooldown = GAME_CONFIG.ENEMY_SUMMONER_SUMMON_COOLDOWN;
@@ -1402,13 +1435,22 @@
                             }
                         }
                         if (enemy.moveCooldown <= 0 && enemy.stunTimer <= 0) {
-                            const target = getClosestTarget(enemy);
-                            const dir = getDirectionToTarget(enemy, target);
-                            const newX = enemy.x + dir.dx;
-                            const newY = enemy.y + dir.dy;
-                            if (newX >= 0 && newX < mapSize && newY >= 0 && newY < mapSize && currentMap[newY][newX] === 0) {
-                                enemy.x = newX;
-                                enemy.y = newY;
+                            if (Math.random() < 0.1) {
+                                const adjacentCells = getAdjacentPositions(enemy.x, enemy.y).filter(pos => currentMap[pos.y][pos.x] === 0 && !enemies.some(e => e.x === pos.x && e.y === pos.y));
+                                if (adjacentCells.length > 0) {
+                                    const randomCell = adjacentCells[Math.floor(Math.random() * adjacentCells.length)];
+                                    enemy.x = randomCell.x;
+                                    enemy.y = randomCell.y;
+                                }
+                            } else {
+                                const target = getClosestTarget(enemy);
+                                const dir = getDirectionToTarget(enemy, target);
+                                const newX = enemy.x + dir.dx;
+                                const newY = enemy.y + dir.dy;
+                                if (newX >= 0 && newX < mapSize && newY >= 0 && newY < mapSize && currentMap[newY][newX] === 0) {
+                                    enemy.x = newX;
+                                    enemy.y = newY;
+                                }
                             }
                             enemy.moveCooldown = enemy.moveSpeed;
                         }
@@ -1475,50 +1517,59 @@
                                 applyAoEDamage(cellX, cellY, arrow.damage);
                                 createExplosionParticles(cellX, cellY, arrow.damage);
                             } else if (enemy.shieldTimer <= 0) {
-                                let finalDamage = arrow.damage;
-                                if (arrow.element && enemy.resistance === arrow.element) {
-                                    finalDamage *= 0.5;
-                                }
-                                enemy.health -= finalDamage;
-                                const dx = enemy.x - player.x;
-                                const dy = enemy.y - player.y;
-                                applyKnockback(enemy, dx, dy, 2);
-                                if (arrow.isCritical) {
-                                    addCriticalDamagePopup(enemy.x, enemy.y, finalDamage);
+                                if (Math.random() < enemy.blockChance) {
+                                    const blockedDamage = arrow.damage * 0.5;
+                                    enemy.health -= blockedDamage;
+                                    addDamagePopup(enemy.x, enemy.y, blockedDamage);
+                                    const type = enhancedEffectsEnabled ? 'emoji' : 'default';
+                                    const emoji = enhancedEffectsEnabled ? '🛡️' : null;
+                                    createParticles(enemy.x, enemy.y, 10, 'gray', 1, 0.2, type, emoji);
                                 } else {
-                                    addDamagePopup(enemy.x, enemy.y, finalDamage);
-                                }
-                                const type = enhancedEffectsEnabled ? 'emoji' : 'default';
-                                const emoji = enhancedEffectsEnabled ? (arrow.element === 'fire' ? '🔥' : arrow.element === 'ice' ? '❄️' : arrow.element === 'lightning' ? '⚡' : arrow.element === 'earth' ? '🪨' : '✨') : null;
-                                createParticles(enemy.x, enemy.y, 15 * arrow.size, arrow.color, 2, 0.4, type, emoji);
-                                if (arrow.isPoison) {
-                                    enemy.poisonTimer = POISON_DURATION;
-                                    enemy.poisonAccumulator = 0;
-                                    enemy.poisonParticleTimer = 0;
-                                }
-                                if (arrow.effect === 'burn') {
-                                    enemy.burnTimer = 5 * arrow.effectStrength;
-                                    enemy.burnAccumulator = 0;
-                                } else if (arrow.effect === 'slow') {
-                                    enemy.slowTimer = 3 * arrow.effectStrength;
-                                } else if (arrow.effect === 'stun' && Math.random() < 0.2) {
-                                    enemy.stunTimer = 2 * arrow.effectStrength;
-                                }
-                                if (enemy.health <= 0) {
-                                    if (enemy.fusionPartner) {
-                                        enemy.fusionPartner.fusionPartner = null;
-                                        enemy.fusionPartner.fusionTimer = 0;
+                                    let finalDamage = arrow.damage;
+                                    if (arrow.element && enemy.resistance === arrow.element) {
+                                        finalDamage *= 0.5;
                                     }
-                                    player.xp += enemy.isFused ? 100 : 50;
-                                    checkLevelUp();
-                                    updateInfo();
-                                    const deathType = enhancedEffectsEnabled ? 'emoji' : 'default';
-                                    const deathEmoji = enhancedEffectsEnabled ? '💀' : null;
-                                    createParticles(enemy.x, enemy.y, 20, 'red', 3, 0.5, deathType, deathEmoji);
-                                    dropLoot(enemy.x, enemy.y);
-                                    enemies.splice(j, 1);
-                                    j--;
-                                    if (!enemies.length) exitUnlocked = true;
+                                    enemy.health -= finalDamage;
+                                    const dx = enemy.x - player.x;
+                                    const dy = enemy.y - player.y;
+                                    applyKnockback(enemy, dx, dy, 2);
+                                    if (arrow.isCritical) {
+                                        addCriticalDamagePopup(enemy.x, enemy.y, finalDamage);
+                                    } else {
+                                        addDamagePopup(enemy.x, enemy.y, finalDamage);
+                                    }
+                                    const type = enhancedEffectsEnabled ? 'emoji' : 'default';
+                                    const emoji = enhancedEffectsEnabled ? (arrow.element === 'fire' ? '🔥' : arrow.element === 'ice' ? '❄️' : arrow.element === 'lightning' ? '⚡' : arrow.element === 'earth' ? '🪨' : '✨') : null;
+                                    createParticles(enemy.x, enemy.y, 15 * arrow.size, arrow.color, 2, 0.4, type, emoji);
+                                    if (arrow.isPoison) {
+                                        enemy.poisonTimer = POISON_DURATION;
+                                        enemy.poisonAccumulator = 0;
+                                        enemy.poisonParticleTimer = 0;
+                                    }
+                                    if (arrow.effect === 'burn') {
+                                        enemy.burnTimer = 5 * arrow.effectStrength;
+                                        enemy.burnAccumulator = 0;
+                                    } else if (arrow.effect === 'slow') {
+                                        enemy.slowTimer = 3 * arrow.effectStrength;
+                                    } else if (arrow.effect === 'stun' && Math.random() < 0.2) {
+                                        enemy.stunTimer = 2 * arrow.effectStrength;
+                                    }
+                                    if (enemy.health <= 0) {
+                                        if (enemy.fusionPartner) {
+                                            enemy.fusionPartner.fusionPartner = null;
+                                            enemy.fusionPartner.fusionTimer = 0;
+                                        }
+                                        player.xp += enemy.isFused ? 100 : 50;
+                                        checkLevelUp();
+                                        updateInfo();
+                                        const deathType = enhancedEffectsEnabled ? 'emoji' : 'default';
+                                        const deathEmoji = enhancedEffectsEnabled ? '💀' : null;
+                                        createParticles(enemy.x, enemy.y, 20, 'red', 3, 0.5, deathType, deathEmoji);
+                                        dropLoot(enemy.x, enemy.y);
+                                        enemies.splice(j, 1);
+                                        j--;
+                                        if (!enemies.length) exitUnlocked = true;
+                                    }
                                 }
                             }
                             arrows.splice(i, 1);
@@ -1665,8 +1716,19 @@
         function getDirectionToTarget(enemy, target) {
             const dx = target.x - enemy.x;
             const dy = target.y - enemy.y;
-            if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? directions.right : directions.left;
-            return dy > 0 ? directions.down : directions.up;
+            if (enemy.type === 'sniper') {
+                const distance = Math.max(Math.abs(dx), Math.abs(dy));
+                if (distance < 3) {
+                    if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? directions.left : directions.right;
+                    return dy > 0 ? directions.up : directions.down;
+                } else {
+                    if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? directions.right : directions.left;
+                    return dy > 0 ? directions.down : directions.up;
+                }
+            } else {
+                if (Math.abs(dx) > Math.abs(dy)) return dx > 0 ? directions.right : directions.left;
+                return dy > 0 ? directions.down : directions.up;
+            }
         }
 
         function updateInventoryDisplay() {
