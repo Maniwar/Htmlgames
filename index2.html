@@ -3,17 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Mage Quest: Elemental Powers</title>
+    <title>Mage Quest: Darkness & Effects</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #080808; font-family: 'Segoe UI', sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
+        body { margin: 0; overflow: hidden; background: #000; font-family: 'Segoe UI', sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
         
         /* UI Layer */
         #ui {
             position: absolute; top: 0; left: 0; width: 100%; padding: 10px;
-            display: flex; justify-content: space-between; pointer-events: none; z-index: 10;
+            display: flex; justify-content: space-between; pointer-events: none; z-index: 20;
             color: white; font-weight: bold; text-shadow: 2px 2px 0 #000; box-sizing: border-box;
         }
-        .hud-box { background: rgba(0,0,0,0.7); padding: 8px 12px; border-radius: 8px; border: 1px solid #444; }
+        .hud-box { background: rgba(0,0,0,0.6); padding: 8px 12px; border-radius: 8px; border: 1px solid #444; }
 
         /* Canvas */
         canvas { display: block; image-rendering: pixelated; width: 100%; height: 100%; }
@@ -21,24 +21,24 @@
         /* Notification */
         #msg {
             position: absolute; top: 20%; left: 50%; transform: translateX(-50%);
-            color: #ffd700; font-size: 24px; font-weight: bold; text-shadow: 0 2px 4px #000;
-            opacity: 0; transition: opacity 0.3s; pointer-events: none; text-align: center; width: 100%;
+            color: #ffd700; font-size: 24px; font-weight: bold; text-shadow: 0 0 10px #000;
+            opacity: 0; transition: opacity 0.3s; pointer-events: none; text-align: center; width: 100%; z-index: 30;
         }
 
         /* Controls */
         #controls {
             position: absolute; bottom: 20px; width: 100%; height: 180px;
-            display: flex; justify-content: space-between; padding: 0 20px; box-sizing: border-box; pointer-events: none; z-index: 20;
+            display: flex; justify-content: space-between; padding: 0 20px; box-sizing: border-box; pointer-events: none; z-index: 30;
         }
         .dpad { position: relative; width: 140px; height: 140px; pointer-events: auto; }
         
         .btn {
             position: absolute; width: 50px; height: 50px;
-            background: rgba(255,255,255,0.1); border: 2px solid rgba(255,255,255,0.3);
+            background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.3);
             border-radius: 12px; display: flex; justify-content: center; align-items: center;
             font-size: 24px; color: white; cursor: pointer; backdrop-filter: blur(4px);
         }
-        .btn:active, .btn.pressed { background: rgba(255,255,255,0.4); transform: scale(0.95); border-color: white; }
+        .btn:active, .btn.pressed { background: rgba(255,255,255,0.5); transform: scale(0.95); border-color: white; }
         
         .up { top: 0; left: 45px; } .down { bottom: 0; left: 45px; }
         .left { top: 45px; left: 0; } .right { top: 45px; right: 0; }
@@ -134,12 +134,10 @@ function update() {
     if((dx||dy) && !P.moving) {
         let nx=P.x+dx, ny=P.y+dy;
         if(!isWall(nx,ny)) {
-            // Diagonal Check
             if(dx!==0 && dy!==0 && isWall(P.x, ny) && isWall(nx, P.y)) {} // Blocked
             else { P.x=nx; P.y=ny; P.moving=true; if(nx===STATE.exit.x && ny===STATE.exit.y && STATE.exit.open) nextLevel(); }
         }
     }
-    // Snappy Lerp
     P.rx += (P.x - P.rx) * 0.5; P.ry += (P.y - P.ry) * 0.5;
     if(Math.abs(P.x-P.rx)<0.01 && Math.abs(P.y-P.ry)<0.01) P.moving=false;
     
@@ -149,7 +147,7 @@ function update() {
 
     // 2. Dash
     if(P.dash>0) P.dash--;
-    if(STATE.keys[' '] && P.dash<=0) {
+    if(STATE.keys[' '] && P.dash <= 0) {
         let ddx = dx||(Math.random()>0.5?1:-1), ddy=dy||0;
         let tx = P.x+ddx*2, ty=P.y+ddy*2;
         if(!isWall(tx,ty)) {
@@ -183,31 +181,17 @@ function update() {
         let hit=false;
         for(let m of STATE.mobs) {
             if(Math.hypot(m.x-s.x, m.y-s.y)<0.7) {
-                // Apply Damage
                 m.hp -= s.dmg;
                 addPop(m.x, m.y, Math.floor(s.dmg), "white");
                 
-                // --- APPLY SPELL EFFECTS ---
-                if(s.spell.effect === 'burn') {
-                    m.status.burn = 120; // 2 seconds
-                    addPop(m.x, m.y - 0.5, "BURN!", "orange");
-                }
-                if(s.spell.effect === 'freeze') {
-                    m.status.freeze = 180; // 3 seconds
-                    addPop(m.x, m.y - 0.5, "FREEZE!", "cyan");
-                }
-                if(s.spell.effect === 'poison') {
-                    m.status.poison = 300; // 5 seconds
-                    addPop(m.x, m.y - 0.5, "POISON!", "lime");
-                }
+                // Status Effects Applier
+                if(s.spell.effect === 'burn') { m.status.burn = 120; addPop(m.x, m.y-0.5, "IGNITE", "orange"); }
+                if(s.spell.effect === 'freeze') { m.status.freeze = 180; addPop(m.x, m.y-0.5, "CHILL", "cyan"); }
+                if(s.spell.effect === 'poison') { m.status.poison = 300; addPop(m.x, m.y-0.5, "POISON", "lime"); }
                 if(s.spell.effect === 'knockback') {
-                    // Push back opposite to player direction
                     let knx = m.x + (s.vx > 0 ? 1 : s.vx < 0 ? -1 : 0);
                     let kny = m.y + (s.vy > 0 ? 1 : s.vy < 0 ? -1 : 0);
-                    if(!isWall(Math.round(knx), Math.round(kny))) {
-                        m.x = knx; m.y = kny; // Instant Knockback
-                    }
-                    addPop(m.x, m.y - 0.5, "PUSH!", "white");
+                    if(!isWall(Math.round(knx), Math.round(kny))) { m.x = knx; m.y = kny; }
                 }
 
                 if(m.hp<=0) killMob(m);
@@ -221,47 +205,41 @@ function update() {
 
     // 5. Mobs Logic
     STATE.mobs.forEach(m => {
-        // --- PROCESS STATUS EFFECTS ---
-        let moveSpeed = 0.035; // Default Speed
+        let moveSpeed = 0.035;
         
-        // Burn: Damage over time
+        // Burn Effect
         if(m.status.burn > 0) {
             m.status.burn--;
-            if(m.status.burn % 30 === 0) {
+            if(m.status.burn % 20 === 0) {
                 m.hp -= 5;
+                addPart(m.x, m.y, "orange", 0, -0.1); // Smoke up
                 addPop(m.x, m.y, "5", "orange");
-                addPart(m.x, m.y, "orange");
             }
-            if(m.hp<=0) killMob(m);
         }
-
-        // Freeze: Slow Down
+        // Freeze Effect
         if(m.status.freeze > 0) {
             m.status.freeze--;
-            moveSpeed = 0.005; // 85% Slower
-            if(Math.random()<0.1) addPart(m.x, m.y, "cyan");
+            moveSpeed = 0.005; // Slow
+            if(Math.random()<0.05) addPart(m.x, m.y, "cyan");
         }
-
-        // Poison: Long duration low damage
+        // Poison Effect
         if(m.status.poison > 0) {
             m.status.poison--;
-            if(m.status.poison % 60 === 0) {
+            if(m.status.poison % 40 === 0) {
                 m.hp -= 3;
+                addPart(m.x, m.y, "lime");
                 addPop(m.x, m.y, "3", "lime");
             }
-            if(m.hp<=0) killMob(m);
         }
+        if(m.hp<=0) killMob(m);
 
         // Movement
         let dist = Math.hypot(P.x-m.x, P.y-m.y);
         if(dist < 8) {
             let mx = (P.x-m.x) * moveSpeed;
             let my = (P.y-m.y) * moveSpeed;
-            if(!isWall(Math.round(m.x+mx), Math.round(m.y+my))) {
-                m.x += mx; m.y += my;
-            }
+            if(!isWall(Math.round(m.x+mx), Math.round(m.y+my))) { m.x += mx; m.y += my; }
         }
-        // Attack Player
         if(dist < 0.6) {
             P.hp -= 0.5;
             if(Math.random()<0.05) addPop(P.rx, P.ry, "-1", "red");
@@ -269,7 +247,7 @@ function update() {
         }
     });
 
-    // Merge (optimized)
+    // Merge
     for(let i=0; i<STATE.mobs.length; i++) {
         for(let j=i+1; j<STATE.mobs.length; j++) {
             let m1=STATE.mobs[i], m2=STATE.mobs[j];
@@ -281,7 +259,7 @@ function update() {
         }
     }
 
-    // Loot
+    // Loot & XP
     for(let i=STATE.loot.length-1; i>=0; i--) {
         let l=STATE.loot[i];
         if(Math.hypot(P.rx-l.x, P.ry-l.y)<0.8) {
@@ -295,17 +273,14 @@ function update() {
             STATE.loot.splice(i,1);
         }
     }
-    // XP
     if(P.xp >= P.nextXp) {
         P.lvl++; P.xp-=P.nextXp; P.nextXp=Math.floor(P.nextXp*1.5); P.maxHp+=20; P.hp=P.maxHp;
         addPop(P.rx, P.ry, "LEVEL UP!", "gold");
     }
 
-    // VFX
+    // VFX & UI
     STATE.parts.forEach((p,i)=>{p.x+=p.vx; p.y+=p.vy; p.life-=0.1; if(p.life<=0) STATE.parts.splice(i,1);});
     STATE.pops.forEach((p,i)=>{p.y-=0.02; p.life--; if(p.life<=0) STATE.pops.splice(i,1);});
-
-    // UI
     document.getElementById('hpTxt').innerText = `❤️ ${Math.floor(P.hp)}/${P.maxHp}`;
     document.getElementById('xpTxt').innerText = `⭐ Lvl ${P.lvl}`;
     document.getElementById('spellTxt').innerText = `${P.spell.icon} ${P.spell.name} (${P.spell.lvl})`;
@@ -314,7 +289,7 @@ function update() {
 
 // --- DRAW ---
 function draw() {
-    X.fillStyle = "#080808"; X.fillRect(0,0,W,H);
+    X.fillStyle = "#000"; X.fillRect(0,0,W,H);
     X.save(); X.translate(-STATE.cam.x, -STATE.cam.y); X.textAlign="center"; X.textBaseline="middle";
 
     let cx=Math.floor(STATE.cam.x/TILE), cy=Math.floor(STATE.cam.y/TILE);
@@ -326,24 +301,21 @@ function draw() {
     STATE.loot.forEach(l=>{ let b=Math.sin(Date.now()/300)*5; X.font="28px serif"; X.fillText(l.icon, l.x*TILE+24, l.y*TILE+24+b); });
     X.font="32px serif"; X.fillText(STATE.exit.open?"🌀":"🔒", STATE.exit.x*TILE+24, STATE.exit.y*TILE+24);
 
+    // Mobs with Status Auras
     STATE.mobs.forEach(m => {
-        let size=TILE*(0.8+m.scale*0.2); X.font=`${size}px serif`;
-        // Color tint via status
-        if(m.status.freeze>0) X.fillStyle = "cyan";
-        else if(m.status.poison>0) X.fillStyle = "lime";
-        else if(m.status.burn>0) X.fillStyle = "orange";
-        else X.fillStyle = "white"; // Default text color doesn't matter much for emojis, but good for debug
+        let drawX = m.x*TILE+24;
+        let drawY = m.y*TILE+24;
+        let size=TILE*(0.8+m.scale*0.2); 
         
-        X.fillText(MOBS_GFX[m.tier]||"👾", m.x*TILE+24, m.y*TILE+24);
+        // Auras for effects
+        if(m.status.freeze>0) { X.fillStyle="rgba(0,255,255,0.3)"; X.beginPath(); X.arc(drawX, drawY, size/1.5, 0, Math.PI*2); X.fill(); }
+        if(m.status.burn>0) { X.fillStyle="rgba(255,68,0,0.3)"; X.beginPath(); X.arc(drawX, drawY, size/1.5, 0, Math.PI*2); X.fill(); }
+        if(m.status.poison>0) { X.fillStyle="rgba(0,255,0,0.3)"; X.beginPath(); X.arc(drawX, drawY, size/1.5, 0, Math.PI*2); X.fill(); }
+
+        X.font=`${size}px serif`;
+        X.fillText(MOBS_GFX[m.tier]||"👾", drawX, drawY);
         X.fillStyle="red"; X.fillRect(m.x*TILE, m.y*TILE-10, TILE, 4);
         X.fillStyle="lime"; X.fillRect(m.x*TILE, m.y*TILE-10, TILE*(m.hp/m.maxHp), 4);
-        
-        // Status Icons
-        let st = "";
-        if(m.status.burn>0) st+="🔥";
-        if(m.status.freeze>0) st+="❄️";
-        if(m.status.poison>0) st+="🤢";
-        if(st) { X.font="12px serif"; X.fillText(st, m.x*TILE+24, m.y*TILE-20); }
     });
 
     X.font="32px serif"; X.fillText("🧙‍♂️", STATE.p.rx*TILE+24, STATE.p.ry*TILE+24);
@@ -353,6 +325,20 @@ function draw() {
     STATE.pops.forEach(p => { X.fillStyle=p.c; X.font="bold 16px sans-serif"; X.fillText(p.t, p.x*TILE+24, p.y*TILE+24); });
 
     X.restore();
+
+    // --- FOG OF WAR (LIGHTING) ---
+    // Calculate player position on SCREEN
+    const px = (STATE.p.rx * TILE + 24) - STATE.cam.x;
+    const py = (STATE.p.ry * TILE + 24) - STATE.cam.y;
+    
+    // Create Gradient centered on player
+    const grad = X.createRadialGradient(px, py, TILE, px, py, W>H ? W/1.5 : H/1.5);
+    grad.addColorStop(0, "rgba(0,0,0,0)");
+    grad.addColorStop(0.3, "rgba(0,0,0,0.5)");
+    grad.addColorStop(1, "rgba(0,0,0,1)");
+    
+    X.fillStyle = grad;
+    X.fillRect(0, 0, W, H);
 }
 
 // --- GEN ---
@@ -375,7 +361,6 @@ function genLevel() {
     for(let i=0;i<3+STATE.floor;i++){
         let p=rnd();
         if(Math.hypot(p.x-start.x,p.y-start.y)>6) 
-            // Initialize status effects here
             STATE.mobs.push({x:p.x,y:p.y,hp:20+STATE.floor*5,maxHp:20+STATE.floor*5,scale:1,tier:0, status:{burn:0, freeze:0, poison:0}});
     }
     let ex=rnd(); STATE.exit={...ex,open:false}; notify(`Floor ${STATE.floor}`);
