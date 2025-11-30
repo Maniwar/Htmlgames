@@ -1,17 +1,3 @@
-This is the **"RPG Update"**. I have overhauled the map generation to prevent diagonal blocking and restored the RPG elements (Leveling up, Spell Rarity, and Specific Spell Types).
-
-### **New Features & Fixes:**
-
-1.  **Map Fix (Diagonal Pinch Removal):** The generator now runs a "Safety Pass." If it detects two walls touching diagonally (which blocks movement), it knocks one down. No more stuck enemies or players.
-2.  **RPG Progression Restored:**
-      * **Leveling:** You gain XP. Leveling up increases your **Max HP** and **Global Damage**.
-      * **Spell Drops:** Scrolls are now specific (Fire, Ice, Poison, Lightning).
-      * **Spell Upgrading:** If you pick up a scroll for a spell you *already* have, it **Levels Up** that specific spell (e.g., "Fireball Lvl 2"), making it bigger and stronger.
-3.  **Visuals:** Added specific particles for different elements (Red for Fire, Green for Poison, etc.).
-
-### **Copy this code into your `.html` file:**
-
-```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -533,4 +519,3 @@ init();
 </script>
 </body>
 </html>
-```
