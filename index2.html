@@ -1,56 +1,83 @@
+This is the **"RPG Update"**. I have overhauled the map generation to prevent diagonal blocking and restored the RPG elements (Leveling up, Spell Rarity, and Specific Spell Types).
+
+### **New Features & Fixes:**
+
+1.  **Map Fix (Diagonal Pinch Removal):** The generator now runs a "Safety Pass." If it detects two walls touching diagonally (which blocks movement), it knocks one down. No more stuck enemies or players.
+2.  **RPG Progression Restored:**
+      * **Leveling:** You gain XP. Leveling up increases your **Max HP** and **Global Damage**.
+      * **Spell Drops:** Scrolls are now specific (Fire, Ice, Poison, Lightning).
+      * **Spell Upgrading:** If you pick up a scroll for a spell you *already* have, it **Levels Up** that specific spell (e.g., "Fireball Lvl 2"), making it bigger and stronger.
+3.  **Visuals:** Added specific particles for different elements (Red for Fire, Green for Poison, etc.).
+
+### **Copy this code into your `.html` file:**
+
+```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Mage Quest: The Complete Edition</title>
+    <title>Mage Quest: RPG Edition</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #111; font-family: 'Segoe UI', sans-serif; touch-action: none; }
+        body { margin: 0; overflow: hidden; background: #050505; font-family: 'Courier New', monospace; touch-action: none; }
+        
+        /* HUD */
         #ui {
-            position: absolute; top: 0; left: 0; width: 100%; padding: 15px;
-            display: flex; justify-content: space-between; pointer-events: none;
-            color: white; font-weight: bold; text-shadow: 2px 2px 0 #000; z-index: 10;
+            position: absolute; top: 0; left: 0; width: 100%; padding: 10px;
+            pointer-events: none; color: white; text-shadow: 2px 2px 0 #000; z-index: 10;
+            display: flex; justify-content: space-between; box-sizing: border-box;
         }
+        .stat-group { background: rgba(0,0,0,0.7); padding: 5px 10px; border: 1px solid #444; border-radius: 5px; }
+        
         canvas { display: block; image-rendering: pixelated; }
         
-        /* Mobile Controls */
+        /* Notifications */
+        #notif {
+            position: absolute; top: 15%; left: 50%; transform: translate(-50%, -50%);
+            color: gold; font-size: 20px; font-weight: bold; text-shadow: 0 0 5px black;
+            opacity: 0; transition: opacity 0.5s; pointer-events: none; text-align: center; width: 100%;
+        }
+
+        /* Controls */
         #controls {
-            position: absolute; bottom: 20px; width: 100%; height: 180px;
-            pointer-events: none; display: flex; justify-content: space-between; padding: 0 40px; box-sizing: border-box;
+            position: absolute; bottom: 20px; width: 100%; height: 160px;
+            pointer-events: none; display: flex; justify-content: space-between; padding: 0 20px; box-sizing: border-box;
         }
         .dpad { position: relative; width: 140px; height: 140px; pointer-events: auto; }
         .btn {
             position: absolute; width: 45px; height: 45px;
-            background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.3);
-            border-radius: 50%; color: white; display: flex; justify-content: center; align-items: center; font-size: 20px;
+            background: rgba(255,255,255,0.1); border: 2px solid rgba(255,255,255,0.2);
+            border-radius: 10px; color: white; display: flex; justify-content: center; align-items: center; font-size: 20px; cursor: pointer;
         }
-        .btn:active { background: rgba(255,255,255,0.5); transform: scale(0.9); }
+        .btn:active { background: rgba(255,255,255,0.4); transform: scale(0.95); border-color: white; }
+        
+        /* Positioning */
         .up { top: 0; left: 47px; } .down { bottom: 0; left: 47px; }
         .left { top: 47px; left: 0; } .right { top: 47px; right: 0; }
         
         #dashBtn {
-            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
-            width: 80px; height: 80px; border-radius: 50%; background: rgba(255, 100, 100, 0.5);
-            border: 4px solid rgba(255, 100, 100, 0.8); pointer-events: auto;
+            position: absolute; bottom: 40px; left: 50%; transform: translateX(-50%);
+            width: 70px; height: 70px; border-radius: 50%; background: #0088ff;
+            border: 4px solid #0055aa; pointer-events: auto; box-shadow: 0 0 10px #0088ff;
             color: white; font-weight: bold; display: flex; justify-content: center; align-items: center;
         }
-        #dashBtn:active { background: red; }
-        
-        /* Notifications */
-        #notif {
-            position: absolute; top: 20%; left: 50%; transform: translate(-50%, -50%);
-            color: cyan; font-size: 24px; font-weight: bold; text-shadow: 0 0 10px blue;
-            opacity: 0; transition: opacity 0.5s; pointer-events: none; text-align: center;
-        }
+        #dashBtn:active { background: #66b2ff; transform: translateX(-50%) scale(0.95); }
     </style>
 </head>
 <body>
 
 <div id="ui">
-    <div>❤️ <span id="hp">100</span> | 🛡️ <span id="lvl">1</span></div>
-    <div>✨ <span id="spell">Basic</span> | 📜 <span id="xp">0</span></div>
+    <div class="stat-group">
+        <div id="hpUi">❤️ 100/100</div>
+        <div id="xpUi" style="color:yellow">⭐ Lvl 1 (0 XP)</div>
+    </div>
+    <div class="stat-group" style="text-align: right;">
+        <div id="spellUi" style="color:cyan">✨ Magic Bolt (Lvl 1)</div>
+        <div id="floorUi" style="color:#aaa">Floor 1</div>
+    </div>
 </div>
-<div id="notif">Level Up!</div>
+
+<div id="notif">Welcome Mage!</div>
 <canvas id="game"></canvas>
 
 <div id="controls">
@@ -66,13 +93,22 @@
 </div>
 
 <script>
+// --- CONFIG & DB ---
+const TILE = 48;
+const SPELL_DB = {
+    fire: { name: "Fireball", color: "#ff4400", scale: 1.2, speed: 7, effect: "explode" },
+    ice: { name: "Ice Shard", color: "#00eeff", scale: 0.8, speed: 9, effect: "pierce" },
+    poison: { name: "Venom Orb", color: "#00ff00", scale: 1.0, speed: 5, effect: "linger" },
+    lightning: { name: "Thunder", color: "#ffff00", scale: 0.6, speed: 12, effect: "fast" }
+};
+
+// --- ENGINE STATE ---
 const C = document.getElementById('game');
 const X = C.getContext('2d');
-const TILE = 48; // Tile size
 let W, H;
 
-const STATE = {
-    map: [], size: 30, stage: 1,
+const GAME = {
+    map: [], size: 30, floor: 1,
     cam: { x:0, y:0 },
     keys: {},
     particles: [],
@@ -84,25 +120,25 @@ const STATE = {
 };
 
 const PL = {
-    x: 1, y: 1, // Logical grid pos
-    rx: 1, ry: 1, // Render pos (smooth)
+    x: 1, y: 1, rx: 1, ry: 1,
     hp: 100, maxHp: 100,
-    xp: 0, lvl: 1,
-    dash: 0, 
-    spell: { name: "Magic Bolt", color: "#aaf", dmg: 10, type: "basic" }
+    xp: 0, lvl: 1, nextXp: 100,
+    dash: 0,
+    moving: false,
+    cool: 0,
+    spell: { id: 'fire', lvl: 1, ...SPELL_DB.fire }
 };
 
-// --- INPUT HANDLING ---
-window.onkeydown = e => STATE.keys[e.key] = true;
-window.onkeyup = e => STATE.keys[e.key] = false;
-window.onresize = resize;
+// --- INIT ---
+window.onkeydown = e => GAME.keys[e.key] = true;
+window.onkeyup = e => GAME.keys[e.key] = false;
+window.addEventListener('resize', resize);
 
 function resize() {
     W = C.width = window.innerWidth;
     H = C.height = window.innerHeight;
 }
 
-// --- MAIN LOOP ---
 function init() {
     resize();
     genLevel();
@@ -115,390 +151,386 @@ function loop() {
     requestAnimationFrame(loop);
 }
 
+// --- UPDATE LOGIC ---
 function update() {
-    // 1. Player Movement & Smoothing
-    let dx = 0, dy = 0;
-    if (STATE.keys.w) dy = -1;
-    if (STATE.keys.s) dy = 1;
-    if (STATE.keys.a) dx = -1;
-    if (STATE.keys.d) dx = 1;
-
-    // Movement Logic
-    if ((dx || dy) && !PL.moving) {
-        let nx = PL.x + dx, ny = PL.y + dy;
-        if (!isWall(nx, ny)) {
-            PL.x = nx; PL.y = ny;
-            PL.moving = true;
-            // Check exit
-            if (nx === STATE.exit.x && ny === STATE.exit.y && STATE.exit.open) nextStage();
-        }
+    // 1. Level Up Check
+    if (PL.xp >= PL.nextXp) {
+        PL.lvl++;
+        PL.xp -= PL.nextXp;
+        PL.nextXp = Math.floor(PL.nextXp * 1.5);
+        PL.maxHp += 20;
+        PL.hp = PL.maxHp;
+        addPopup(PL.rx, PL.ry, "LEVEL UP!", "gold");
+        notify(`Reaching Level ${PL.lvl}! Stats Up!`);
     }
 
-    // Smooth Lerp (Visuals catch up to logic)
-    PL.rx += (PL.x - PL.rx) * 0.2;
-    PL.ry += (PL.y - PL.ry) * 0.2;
-    if (Math.abs(PL.x - PL.rx) < 0.05) PL.moving = false;
+    // 2. Movement & Collision
+    let dx = 0, dy = 0;
+    if (GAME.keys.w) dy = -1;
+    if (GAME.keys.s) dy = 1;
+    if (GAME.keys.a) dx = -1;
+    if (GAME.keys.d) dx = 1;
 
-    // Camera Follow
-    STATE.cam.x += ((PL.rx * TILE - W/2) - STATE.cam.x) * 0.1;
-    STATE.cam.y += ((PL.ry * TILE - H/2) - STATE.cam.y) * 0.1;
-
-    // 2. Dash Logic
-    if (PL.dash > 0) PL.dash--;
-    if (STATE.keys[' '] && PL.dash <= 0) {
-        // Dash Direction is based on last move or default forward
-        let ddx = dx || (Math.random() > 0.5 ? 1 : -1); 
-        let ddy = dy || 0;
-        
-        // Attempt long jump (2 tiles)
-        let tx = PL.x + ddx * 2;
-        let ty = PL.y + ddy * 2;
-        
-        if (!isWall(tx, ty)) {
-            PL.x = tx; PL.y = ty;
-            PL.rx = tx; PL.ry = ty; // Snap visual
-            PL.dash = 60; // Cooldown
-            addPopup(PL.rx, PL.ry, "DASH!", "cyan");
-            
-            // DIRECTIONAL PARTICLES: Emit opposite to movement
-            for(let i=0; i<15; i++) {
-                // Particles trail BEHIND the player
-                addPart(PL.rx * TILE + 24, PL.ry * TILE + 24, "white", -ddx * 4, -ddy * 4);
+    if ((dx || dy) && !PL.moving) {
+        let nx = PL.x + dx, ny = PL.y + dy;
+        // Collision: Check Walls AND Diagonal blockades
+        if (!isWall(nx, ny)) {
+            // Strict diagonal check: Don't allow passing if both cardinal neighbors are walls
+            // (e.g. moving NE requires N or E to be open)
+            let nFree = !isWall(PL.x, ny);
+            let eFree = !isWall(nx, PL.y);
+            if(dx !== 0 && dy !== 0 && !nFree && !eFree) {
+                // Blocked diagonally
+            } else {
+                PL.x = nx; PL.y = ny;
+                PL.moving = true;
+                if (nx === GAME.exit.x && ny === GAME.exit.y && GAME.exit.open) nextFloor();
             }
         }
     }
 
-    // 3. Shooting
+    // Smooth Lerp
+    PL.rx += (PL.x - PL.rx) * 0.25;
+    PL.ry += (PL.y - PL.ry) * 0.25;
+    if (Math.abs(PL.x - PL.rx) < 0.01) PL.moving = false;
+
+    // Camera
+    GAME.cam.x += ((PL.rx * TILE - W/2) - GAME.cam.x) * 0.1;
+    GAME.cam.y += ((PL.ry * TILE - H/2) - GAME.cam.y) * 0.1;
+
+    // 3. Dash
+    if (PL.dash > 0) PL.dash--;
+    if (GAME.keys[' '] && PL.dash <= 0) {
+        let ddx = dx || (Math.random()>0.5?1:-1), ddy = dy || 0;
+        let tx = PL.x + ddx*2, ty = PL.y + ddy*2;
+        if (!isWall(tx, ty)) {
+            PL.x = tx; PL.y = ty; PL.rx = tx; PL.ry = ty;
+            PL.dash = 50;
+            addPopup(PL.rx, PL.ry, "DASH!", "cyan");
+            // Trailing Particles
+            for(let i=0; i<10; i++) addPart(PL.rx*TILE+24, PL.ry*TILE+24, "white", -ddx*3, -ddy*3, 1);
+        }
+    }
+
+    // 4. Combat / Shooting
     if (PL.cool > 0) PL.cool--;
     if (PL.cool <= 0) {
         let sx=0, sy=0;
-        if (STATE.keys.ArrowUp) sy = -1;
-        else if (STATE.keys.ArrowDown) sy = 1;
-        else if (STATE.keys.ArrowLeft) sx = -1;
-        else if (STATE.keys.ArrowRight) sx = 1;
+        if (GAME.keys.ArrowUp) sy = -1;
+        else if (GAME.keys.ArrowDown) sy = 1;
+        else if (GAME.keys.ArrowLeft) sx = -1;
+        else if (GAME.keys.ArrowRight) sx = 1;
 
         if (sx || sy) {
-            STATE.shots.push({ x: PL.rx, y: PL.ry, vx: sx*0.3, vy: sy*0.3, life: 60, spell: PL.spell });
+            let dmg = (10 + (PL.lvl * 2)) * (1 + (PL.spell.lvl * 0.2)); // RPG Damage Formula
+            GAME.shots.push({ 
+                x: PL.rx, y: PL.ry, vx: sx*0.3, vy: sy*0.3, 
+                life: 50, color: PL.spell.color, dmg: dmg, 
+                scale: PL.spell.scale + (PL.spell.lvl * 0.1) // Spells get bigger
+            });
             PL.cool = 15;
         }
     }
 
-    // 4. Projectiles
-    STATE.shots.forEach((s, i) => {
-        s.x += s.vx; s.y += s.vy;
+    // 5. Entities Update
+    GAME.shots.forEach((s, i) => {
+        s.x += s.vx * (PL.spell.speed/5); 
+        s.y += s.vy * (PL.spell.speed/5);
         s.life--;
-        addPart(s.x*TILE+24, s.y*TILE+24, s.spell.color, -s.vx*5, -s.vy*5, 0.5); // Trail
+        addPart(s.x*TILE+24, s.y*TILE+24, s.color, -s.vx*5, -s.vy*5, 0.3); // Trail
+        
+        if (isWall(Math.round(s.x), Math.round(s.y))) s.life = 0; // Wall hit
 
-        // Wall Hit
-        if (isWall(Math.round(s.x), Math.round(s.y))) s.life = 0;
-
-        // Enemy Hit
-        STATE.mobs.forEach(m => {
-            if (Math.hypot(m.x - s.x, m.y - s.y) < 0.6) {
-                m.hp -= s.spell.dmg;
+        GAME.mobs.forEach(m => {
+            if (Math.hypot(m.x - s.x, m.y - s.y) < 0.7) {
+                m.hp -= s.dmg;
                 s.life = 0;
-                addPopup(m.x, m.y, s.spell.dmg, "orange");
+                addPopup(m.x, m.y, Math.floor(s.dmg), "orange");
+                addPart(m.x*TILE+24, m.y*TILE+24, "red", 0, 0, 1.5); // Blood
                 if (m.hp <= 0) killMob(m);
             }
         });
-
-        if (s.life <= 0) STATE.shots.splice(i, 1);
+        if (s.life <= 0) GAME.shots.splice(i, 1);
     });
 
-    // 5. Mobs Logic & MERGING
-    STATE.mobs.forEach((m, i) => {
-        // Simple Chase
-        let dis = Math.hypot(PL.x - m.x, PL.y - m.y);
-        if (dis < 8) {
-            m.x += (PL.x - m.x) * 0.03;
-            m.y += (PL.y - m.y) * 0.03;
+    GAME.mobs.forEach((m, i) => {
+        // AI: Simple Pathing
+        let dist = Math.hypot(PL.x - m.x, PL.y - m.y);
+        if (dist < 8) {
+            let mx = (PL.x - m.x) * 0.035;
+            let my = (PL.y - m.y) * 0.035;
+            // Prevent diagonal sticking for mobs too
+            let nx = m.x + mx;
+            let ny = m.y + my;
+            if(!isWall(Math.round(nx), Math.round(ny))) {
+                m.x = nx; m.y = ny;
+            }
+        }
+        
+        // Merge Logic
+        for (let j = i + 1; j < GAME.mobs.length; j++) {
+            let o = GAME.mobs[j];
+            if (Math.hypot(m.x - o.x, m.y - o.y) < 0.6) {
+                m.hp += o.hp; m.maxHp += o.maxHp; m.scale += 0.4;
+                m.color = "purple"; // Boss color
+                addPopup(m.x, m.y, "MERGE!", "magenta");
+                GAME.mobs.splice(j, 1);
+            }
         }
 
-        // Damage Player
-        if (dis < 0.5) {
+        if (dist < 0.6) {
             PL.hp -= 0.5;
             if(Math.random()<0.1) addPopup(PL.rx, PL.ry, "-1", "red");
-            if(PL.hp <= 0) location.reload(); 
-        }
-
-        // MERGING LOGIC: Check collisions with other mobs
-        for (let j = i + 1; j < STATE.mobs.length; j++) {
-            let other = STATE.mobs[j];
-            if (Math.hypot(m.x - other.x, m.y - other.y) < 0.5 && !m.merged && !other.merged) {
-                // MERGE!
-                m.hp += other.hp;
-                m.maxHp += other.maxHp;
-                m.scale = (m.scale || 1) + 0.5; // Grow bigger
-                m.color = "purple"; // Change color
-                addPopup(m.x, m.y, "MERGE!", "magenta");
-                
-                STATE.mobs.splice(j, 1); // Remove other
-                m.merged = true; // Cooldown flag
-                setTimeout(() => m.merged = false, 2000);
-            }
+            if(PL.hp <= 0) { location.reload(); }
         }
     });
 
-    // 6. Loot Pickup & SPELL MIXING
-    STATE.loot.forEach((l, i) => {
+    // Loot
+    GAME.loot.forEach((l, i) => {
         if (Math.hypot(PL.rx - l.x, PL.ry - l.y) < 0.8) {
             if (l.type === 'spell') {
-                mixSpell(l.variant);
-            } else if (l.type === 'heal') {
-                PL.hp = Math.min(PL.maxHp, PL.hp + 20);
-                addPopup(PL.rx, PL.ry, "+20 HP", "lime");
+                if (PL.spell.id === l.id) {
+                    PL.spell.lvl++;
+                    addPopup(PL.rx, PL.ry, "SPELL UPGRADE!", "cyan");
+                    notify(`${PL.spell.name} is now Level ${PL.spell.lvl}!`);
+                } else {
+                    PL.spell = { id: l.id, lvl: 1, ...SPELL_DB[l.id] };
+                    addPopup(PL.rx, PL.ry, "NEW SPELL!", l.color);
+                    notify(`Equipped: ${PL.spell.name}`);
+                }
+            } else {
+                PL.hp = Math.min(PL.maxHp, PL.hp + 30);
+                addPopup(PL.rx, PL.ry, "+30 HP", "lime");
             }
-            STATE.loot.splice(i, 1);
+            GAME.loot.splice(i, 1);
         }
     });
 
     // Particles
-    STATE.particles.forEach((p, i) => {
+    GAME.particles.forEach((p, i) => {
         p.x += p.vx; p.y += p.vy; p.life -= 0.05;
-        if (p.life <= 0) STATE.particles.splice(i, 1);
+        if (p.life <= 0) GAME.particles.splice(i, 1);
     });
-    
-    // UI Updates
-    document.getElementById('hp').innerText = Math.floor(PL.hp);
-    document.getElementById('spell').innerText = PL.spell.name;
-}
 
-// --- SPELL MIXING SYSTEM ---
-function mixSpell(newType) {
-    let current = PL.spell.type;
-    
-    // Logic: Combine types
-    if (current === 'basic') {
-        if (newType === 'fire') setSpell('Fireball', 'orange', 15, 'fire');
-        if (newType === 'ice') setSpell('Ice Shard', 'cyan', 12, 'ice');
-    } 
-    else if (current === 'fire') {
-        if (newType === 'ice') setSpell('Frostfire', 'violet', 25, 'hybrid'); // MIX!
-        else setSpell('Inferno', 'red', 20, 'fire'); // Upgrade
-    }
-    else if (current === 'ice') {
-        if (newType === 'fire') setSpell('Frostfire', 'violet', 25, 'hybrid'); // MIX!
-        else setSpell('Blizzard', 'blue', 18, 'ice'); // Upgrade
-    }
-    else if (current === 'hybrid') {
-        setSpell('Omega Beam', 'white', 50, 'god'); // MAX LEVEL
-    }
-    
-    addPopup(PL.rx, PL.ry, "SPELL MIX!", "gold");
-    notify(`Equipped: ${PL.spell.name}`);
-}
-
-function setSpell(name, color, dmg, type) {
-    PL.spell = { name, color, dmg, type };
+    // HUD
+    document.getElementById('hpUi').innerText = `❤️ ${Math.floor(PL.hp)}/${PL.maxHp}`;
+    document.getElementById('xpUi').innerText = `⭐ Lvl ${PL.lvl} (${Math.floor(PL.xp)}/${PL.nextXp} XP)`;
+    document.getElementById('spellUi').innerText = `✨ ${PL.spell.name} (Lvl ${PL.spell.lvl})`;
+    document.getElementById('floorUi').innerText = `Floor ${GAME.floor}`;
 }
 
 // --- DRAWING ---
 function draw() {
-    // Clear
     X.fillStyle = "#111";
     X.fillRect(0, 0, W, H);
-
     X.save();
-    X.translate(-STATE.cam.x, -STATE.cam.y);
+    X.translate(-GAME.cam.x, -GAME.cam.y);
 
-    // Map (Optimized)
-    let cx = Math.floor(STATE.cam.x / TILE);
-    let cy = Math.floor(STATE.cam.y / TILE);
+    // Map
+    let cx = Math.floor(GAME.cam.x / TILE);
+    let cy = Math.floor(GAME.cam.y / TILE);
     for (let y = cy; y < cy + H/TILE + 1; y++) {
         for (let x = cx; x < cx + W/TILE + 1; x++) {
             if (isWall(x, y)) {
-                X.fillStyle = "#444";
+                X.fillStyle = "#333";
                 X.fillRect(x*TILE, y*TILE, TILE, TILE);
-                X.fillStyle = "#222"; // Shadow
-                X.fillRect(x*TILE, y*TILE+40, TILE, 8);
+                X.fillStyle = "#1a1a1a";
+                X.fillRect(x*TILE, y*TILE+40, TILE, 8); // Fake 3D depth
             } else {
                 X.strokeStyle = "#222";
+                X.lineWidth = 2;
                 X.strokeRect(x*TILE, y*TILE, TILE, TILE);
             }
         }
     }
 
-    // Exit
-    if (STATE.exit.open) {
-        X.font = "40px serif";
-        X.fillText("🌀", STATE.exit.x*TILE + 4, STATE.exit.y*TILE + 36);
-    }
-
     // Loot
-    STATE.loot.forEach(l => {
+    GAME.loot.forEach(l => {
         X.font = "30px serif";
+        X.fillStyle = l.color || "white";
         X.fillText(l.icon, l.x*TILE+10, l.y*TILE+35);
     });
+    
+    // Exit
+    if (GAME.exit.open) {
+        X.font = "40px serif";
+        X.fillText("🌀", GAME.exit.x*TILE+5, GAME.exit.y*TILE+40);
+    } else {
+        X.font = "40px serif";
+        X.fillText("🔒", GAME.exit.x*TILE+5, GAME.exit.y*TILE+40);
+    }
 
     // Mobs
-    STATE.mobs.forEach(m => {
+    GAME.mobs.forEach(m => {
         let s = (m.scale || 1) * TILE;
         X.fillStyle = m.color || "red";
         X.fillRect(m.x*TILE - s/2 + 24, m.y*TILE - s/2 + 24, s, s);
-        // HP Bar
-        X.fillStyle = "lime";
-        X.fillRect(m.x*TILE, m.y*TILE - 10, TILE * (m.hp/m.maxHp), 4);
+        // HP
+        X.fillStyle = "#550000"; X.fillRect(m.x*TILE, m.y*TILE-10, TILE, 4);
+        X.fillStyle = "#00ff00"; X.fillRect(m.x*TILE, m.y*TILE-10, TILE*(m.hp/m.maxHp), 4);
     });
 
     // Player
     X.font = "40px serif";
-    X.fillText("🧙‍♂️", PL.rx*TILE + 4, PL.ry*TILE + 36);
+    X.fillText("🧙‍♂️", PL.rx*TILE+5, PL.ry*TILE+40);
 
     // Particles
-    STATE.particles.forEach(p => {
-        X.fillStyle = p.color;
+    GAME.particles.forEach(p => {
+        X.fillStyle = p.c;
         X.globalAlpha = p.life;
         X.beginPath();
-        X.arc(p.x, p.y, p.r || 4, 0, Math.PI*2);
+        X.arc(p.x, p.y, p.r || 3, 0, Math.PI*2);
         X.fill();
     });
     X.globalAlpha = 1;
 
     // Popups
-    STATE.popups.forEach((p, i) => {
-        p.life--;
-        p.y -= 0.05;
+    GAME.popups.forEach((p, i) => {
+        p.life--; p.y -= 0.02;
         X.fillStyle = p.c;
-        X.font = "bold 20px sans-serif";
+        X.font = "bold 16px sans-serif";
         X.fillText(p.t, p.x*TILE, p.y*TILE);
-        if(p.life <= 0) STATE.popups.splice(i,1);
+        if(p.life <= 0) GAME.popups.splice(i,1);
     });
 
     X.restore();
 }
 
-// --- GENERATION (GUARANTEED CONNECTED) ---
+// --- GENERATOR (Diagonal Pinch Fix) ---
 function genLevel() {
-    STATE.size = 20 + STATE.stage * 5;
+    GAME.size = 20 + GAME.floor * 5;
     let m = [];
     
-    // 1. Random Noise
-    for(let y=0; y<STATE.size; y++) {
-        let row = [];
-        for(let x=0; x<STATE.size; x++) {
-            if (x===0 || y===0 || x===STATE.size-1 || y===STATE.size-1) row.push(1);
-            else row.push(Math.random() > 0.4 ? 1 : 0);
-        }
-        m.push(row);
+    // 1. Noise
+    for(let y=0; y<GAME.size; y++) {
+        let r=[]; 
+        for(let x=0; x<GAME.size; x++) 
+            r.push((x==0||y==0||x==GAME.size-1||y==GAME.size-1 || Math.random()<0.45) ? 1 : 0);
+        m.push(r);
     }
-
-    // 2. Cellular Automata (Smooth)
-    for(let i=0; i<5; i++) {
+    // 2. Smooth
+    for(let i=0; i<4; i++) {
         let nm = JSON.parse(JSON.stringify(m));
-        for(let y=1; y<STATE.size-1; y++) for(let x=1; x<STATE.size-1; x++) {
-            let n = 0;
+        for(let y=1; y<GAME.size-1; y++) for(let x=1; x<GAME.size-1; x++) {
+            let n=0;
             for(let dy=-1; dy<=1; dy++) for(let dx=-1; dx<=1; dx++) if(m[y+dy][x+dx]) n++;
-            if(n >= 5) nm[y][x] = 1; else if(n <= 3) nm[y][x] = 0;
+            if(n>=5) nm[y][x]=1; else if(n<=3) nm[y][x]=0;
         }
         m = nm;
     }
-    STATE.map = m;
-
-    // 3. GUARANTEED CONNECTIVITY (Tunneling)
-    // Find first floor tile
-    let start = null;
-    for(let y=1; y<STATE.size-1; y++) for(let x=1; x<STATE.size-1; x++) {
-        if(!m[y][x]) { start = {x,y}; break; }
-    }
-    if(!start) return genLevel(); // Retry if solid rock
-
-    // Flood fill to find all reachable
-    let reachable = new Set();
-    let q = [start];
-    reachable.add(`${start.x},${start.y}`);
     
-    while(q.length) {
-        let c = q.pop();
-        [[0,1],[0,-1],[1,0],[-1,0]].forEach(([dx,dy]) => {
-            let nx = c.x+dx, ny = c.y+dy;
-            if(!m[ny][nx] && !reachable.has(`${nx},${ny}`)) {
-                reachable.add(`${nx},${ny}`);
-                q.push({x:nx, y:ny});
+    // 3. DIAGONAL PINCH REMOVAL (The Fix)
+    // Ensures if (0,0) and (1,1) are floors, (0,1) and (1,0) aren't BOTH walls.
+    for(let y=1; y<GAME.size-1; y++) {
+        for(let x=1; x<GAME.size-1; x++) {
+            if(m[y][x] === 0 && m[y+1][x+1] === 0) {
+                // We have a diagonal floor connection
+                if(m[y][x+1] === 1 && m[y+1][x] === 1) {
+                    // It's pinched by walls! Remove one.
+                    m[y][x+1] = 0; 
+                }
             }
-        });
-    }
-
-    // Check for islands and tunnel to them
-    for(let y=1; y<STATE.size-1; y++) for(let x=1; x<STATE.size-1; x++) {
-        if(!m[y][x] && !reachable.has(`${x},${y}`)) {
-            // Found an island! Dig a tunnel to nearest reachable point
-            // (Simplified: Just blast a line to start)
-            let cur = {x,y};
-            while(m[cur.y][cur.x] !== 0 || !reachable.has(`${cur.x},${cur.y}`)) {
-                m[cur.y][cur.x] = 0; // Dig
-                if(cur.x < start.x) cur.x++;
-                else if(cur.x > start.x) cur.x--;
-                if(cur.y < start.y) cur.y++;
-                else if(cur.y > start.y) cur.y--;
+            if(m[y][x+1] === 0 && m[y+1][x] === 0) {
+                if(m[y][x] === 1 && m[y+1][x+1] === 1) {
+                    m[y][x] = 0;
+                }
             }
         }
     }
 
-    // 4. Place Entities
-    PL.x = start.x; PL.y = start.y; PL.rx = start.x; PL.ry = start.y;
+    // 4. Flood Fill & Tunneling (Connectivity)
+    let start = null;
+    for(let y=1; y<GAME.size-1; y++) for(let x=1; x<GAME.size-1; x++) if(!m[y][x]) { start={x,y}; break; }
+    if(!start) return genLevel(); // Bad map
     
-    // Exit
-    let ex;
-    do { ex = {x: rInt(STATE.size), y: rInt(STATE.size)}; } while(m[ex.y][ex.x]);
-    STATE.exit = { ...ex, open: false };
-
-    // Mobs
-    STATE.mobs = [];
-    for(let i=0; i<5+STATE.stage; i++) {
-        let mx, my;
-        do { mx=rInt(STATE.size); my=rInt(STATE.size); } while(m[my][mx] || Math.hypot(mx-PL.x, my-PL.y)<5);
-        STATE.mobs.push({ x:mx, y:my, hp:20+STATE.stage*5, maxHp:20+STATE.stage*5 });
-    }
-
-    // Loot
-    STATE.loot = [];
-    for(let i=0; i<4; i++) {
-        let lx, ly;
-        do { lx=rInt(STATE.size); ly=rInt(STATE.size); } while(m[ly][lx]);
-        let isSpell = Math.random() > 0.5;
-        STATE.loot.push({ 
-            x:lx, y:ly, 
-            type: isSpell ? 'spell' : 'heal',
-            variant: Math.random()>0.5 ? 'fire' : 'ice',
-            icon: isSpell ? '📜' : '🍷'
+    let visited = new Set();
+    let q = [start];
+    visited.add(`${start.x},${start.y}`);
+    while(q.length) {
+        let c = q.pop();
+        [[0,1],[0,-1],[1,0],[-1,0]].forEach(([dx,dy])=>{
+            let nx=c.x+dx, ny=c.y+dy;
+            if(!m[ny][nx] && !visited.has(`${nx},${ny}`)) { visited.add(`${nx},${ny}`); q.push({x:nx,y:ny}); }
         });
     }
+    
+    // Dig to islands
+    for(let y=1; y<GAME.size-1; y++) for(let x=1; x<GAME.size-1; x++) {
+        if(!m[y][x] && !visited.has(`${x},${y}`)) {
+            let cur={x,y};
+            while(m[cur.y][cur.x]!==0 || !visited.has(`${cur.x},${cur.y}`)) {
+                m[cur.y][cur.x]=0;
+                if(cur.x < start.x) cur.x++; else if(cur.x > start.x) cur.x--;
+                if(cur.y < start.y) cur.y++; else if(cur.y > start.y) cur.y--;
+            }
+        }
+    }
+    GAME.map = m;
+    
+    // 5. Populate
+    PL.x=start.x; PL.y=start.y; PL.rx=start.x; PL.ry=start.y;
+    
+    // Loot (Spells & Potions)
+    GAME.loot = [];
+    for(let i=0; i<5; i++) {
+        let p = rndPos();
+        let isSpell = Math.random() > 0.4;
+        let keys = Object.keys(SPELL_DB);
+        let key = keys[Math.floor(Math.random()*keys.length)];
+        GAME.loot.push({
+            x:p.x, y:p.y, 
+            type: isSpell ? 'spell' : 'heal',
+            id: key,
+            icon: isSpell ? '📜' : '🍷',
+            color: isSpell ? SPELL_DB[key].color : 'red'
+        });
+    }
+    
+    // Mobs
+    GAME.mobs = [];
+    for(let i=0; i<4 + GAME.floor; i++) {
+        let p = rndPos();
+        if(Math.hypot(p.x-PL.x, p.y-PL.y) > 5)
+            GAME.mobs.push({x:p.x, y:p.y, hp:20+GAME.floor*5, maxHp:20+GAME.floor*5, scale:1});
+    }
 
-    notify(`Stage ${STATE.stage}`);
+    // Exit
+    let ep = rndPos();
+    GAME.exit = { ...ep, open: false };
+    
+    notify(`Floor ${GAME.floor}`);
 }
 
 // --- UTILS ---
 function isWall(x, y) {
-    if(x<0 || y<0 || x>=STATE.size || y>=STATE.size) return true;
-    return STATE.map[y][x];
+    if(x<0||y<0||x>=GAME.size||y>=GAME.size) return true;
+    return GAME.map[y][x];
 }
-function addPart(x, y, c, vx, vy, r) {
-    STATE.particles.push({ x, y, c, vx: (Math.random()-0.5)*2 + vx, vy: (Math.random()-0.5)*2 + vy, life: 1, r });
+function rndPos() {
+    let x,y; do { x=Math.floor(Math.random()*GAME.size); y=Math.floor(Math.random()*GAME.size); } while(isWall(x,y));
+    return {x,y};
 }
-function addPopup(x, y, t, c) { STATE.popups.push({x,y,t,c,life:1}); }
-function killMob(m) {
-    STATE.mobs = STATE.mobs.filter(e => e !== m);
-    PL.xp += 10;
-    if(STATE.mobs.length === 0) { STATE.exit.open = true; notify("Exit Open!"); }
+function addPart(x, y, c, vx, vy, r) { GAME.particles.push({x,y,c,vx:(Math.random()-0.5)+vx, vy:(Math.random()-0.5)+vy, life:1, r}); }
+function addPopup(x, y, t, c) { GAME.popups.push({x,y,t,c,life:100}); }
+function notify(m) { let e=document.getElementById('notif'); e.innerText=m; e.style.opacity=1; setTimeout(()=>e.style.opacity=0, 2000); }
+function killMob(m) { 
+    GAME.mobs = GAME.mobs.filter(e=>e!==m); 
+    PL.xp += 20; 
+    addPopup(m.x, m.y, "+20 XP", "white");
+    if(GAME.mobs.length===0) { GAME.exit.open=true; notify("Portal Open!"); }
 }
-function nextStage() { STATE.stage++; genLevel(); }
-function notify(msg) {
-    let el = document.getElementById('notif');
-    el.innerText = msg; el.style.opacity = 1;
-    setTimeout(() => el.style.opacity = 0, 2000);
-}
-function rInt(n) { return Math.floor(Math.random()*n); }
+function nextFloor() { GAME.floor++; genLevel(); }
 
-// Controls Logic
+// Controls (Mouse/Touch)
 document.querySelectorAll('.btn').forEach(b => {
-    b.onpointerdown = e => { STATE.keys[b.dataset.k] = true; b.style.background="rgba(255,255,255,0.5)"; e.preventDefault(); };
-    b.onpointerup = e => { STATE.keys[b.dataset.k] = false; b.style.background=""; e.preventDefault(); };
-    b.onpointerleave = e => { STATE.keys[b.dataset.k] = false; b.style.background=""; };
+    b.onpointerdown = e => { GAME.keys[b.dataset.k] = true; e.preventDefault(); };
+    b.onpointerup = e => { GAME.keys[b.dataset.k] = false; e.preventDefault(); };
 });
-document.getElementById('dashBtn').onpointerdown = e => { STATE.keys[' '] = true; e.preventDefault(); };
-document.getElementById('dashBtn').onpointerup = e => { STATE.keys[' '] = false; e.preventDefault(); };
+document.getElementById('dashBtn').onpointerdown = e => { GAME.keys[' '] = true; e.preventDefault(); };
+document.getElementById('dashBtn').onpointerup = e => { GAME.keys[' '] = false; e.preventDefault(); };
 
 init();
 </script>
 </body>
 </html>
+```
