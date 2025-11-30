@@ -3,832 +3,502 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Mage Quest: Deep Dungeon (Fixed)</title>
+    <title>Mage Quest: The Complete Edition</title>
     <style>
-        body {
-            margin: 0;
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            min-height: 100vh;
-            background-color: #1a1a1a;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            overflow: hidden;
-            color: white;
+        body { margin: 0; overflow: hidden; background: #111; font-family: 'Segoe UI', sans-serif; touch-action: none; }
+        #ui {
+            position: absolute; top: 0; left: 0; width: 100%; padding: 15px;
+            display: flex; justify-content: space-between; pointer-events: none;
+            color: white; font-weight: bold; text-shadow: 2px 2px 0 #000; z-index: 10;
         }
-        #gameWrapper {
-            position: relative;
-            width: 100%;
-            max-width: 800px;
-            height: 100vh;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-        }
-        #uiLayer {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            padding: 10px;
-            pointer-events: none;
-            box-sizing: border-box;
-            display: flex;
-            justify-content: space-between;
-            text-shadow: 2px 2px 0 #000;
-            z-index: 10;
-        }
-        .stat-box {
-            background: rgba(0,0,0,0.6);
-            padding: 5px 10px;
-            border-radius: 8px;
-            border: 1px solid #444;
-        }
-        #gameCanvas {
-            background-color: #000;
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
-        }
+        canvas { display: block; image-rendering: pixelated; }
         
-        #controlsLayer {
-            position: absolute;
-            bottom: 20px;
-            width: 100%;
-            height: 200px;
-            pointer-events: none;
-            display: flex;
-            justify-content: space-between;
-            padding: 0 20px;
-            box-sizing: border-box;
-            z-index: 10;
+        /* Mobile Controls */
+        #controls {
+            position: absolute; bottom: 20px; width: 100%; height: 180px;
+            pointer-events: none; display: flex; justify-content: space-between; padding: 0 40px; box-sizing: border-box;
         }
-        .control-group {
-            pointer-events: auto;
-            position: relative;
-            width: 150px;
-            height: 150px;
+        .dpad { position: relative; width: 140px; height: 140px; pointer-events: auto; }
+        .btn {
+            position: absolute; width: 45px; height: 45px;
+            background: rgba(255,255,255,0.15); border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 50%; color: white; display: flex; justify-content: center; align-items: center; font-size: 20px;
         }
-        .dpad-btn {
-            position: absolute;
-            width: 50px;
-            height: 50px;
-            background: rgba(255, 255, 255, 0.2);
-            border: 2px solid rgba(255, 255, 255, 0.4);
-            border-radius: 50%;
-            backdrop-filter: blur(4px);
-            touch-action: none;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            font-size: 24px;
-            user-select: none;
-            cursor: pointer;
-        }
-        .dpad-btn:active, .dpad-btn.pressed { background: rgba(255, 255, 255, 0.5); transform: scale(0.95); }
+        .btn:active { background: rgba(255,255,255,0.5); transform: scale(0.9); }
+        .up { top: 0; left: 47px; } .down { bottom: 0; left: 47px; }
+        .left { top: 47px; left: 0; } .right { top: 47px; right: 0; }
         
-        .up { top: 0; left: 50px; }
-        .down { bottom: 0; left: 50px; }
-        .left { top: 50px; left: 0; }
-        .right { top: 50px; right: 0; }
-        
-        #actionContainer {
-            pointer-events: auto;
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-            justify-content: flex-end;
-            padding-bottom: 20px;
+        #dashBtn {
+            position: absolute; bottom: 30px; left: 50%; transform: translateX(-50%);
+            width: 80px; height: 80px; border-radius: 50%; background: rgba(255, 100, 100, 0.5);
+            border: 4px solid rgba(255, 100, 100, 0.8); pointer-events: auto;
+            color: white; font-weight: bold; display: flex; justify-content: center; align-items: center;
         }
-        .action-btn {
-            background: #4a90e2;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 20px;
-            font-weight: bold;
-            box-shadow: 0 4px 0 #2c5f99;
-            cursor: pointer;
-        }
-        .action-btn:active { transform: translateY(4px); box-shadow: none; }
+        #dashBtn:active { background: red; }
         
-        #dashBtn { background: #e24a4a; box-shadow: 0 4px 0 #992c2c; }
-
-        #notification {
-            position: absolute;
-            top: 60px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(50, 50, 255, 0.8);
-            color: white;
-            padding: 10px 20px;
-            border-radius: 20px;
-            opacity: 0;
-            transition: opacity 0.3s;
-            pointer-events: none;
-            z-index: 20;
-            white-space: nowrap;
+        /* Notifications */
+        #notif {
+            position: absolute; top: 20%; left: 50%; transform: translate(-50%, -50%);
+            color: cyan; font-size: 24px; font-weight: bold; text-shadow: 0 0 10px blue;
+            opacity: 0; transition: opacity 0.5s; pointer-events: none; text-align: center;
         }
     </style>
 </head>
 <body>
 
-<div id="gameWrapper">
-    <div id="uiLayer">
-        <div class="stat-box">
-            <div id="healthDisplay">❤️ 100/100</div>
-            <div id="manaDisplay" style="color: #aaf; font-size: 0.8em;">Dash Ready</div>
-        </div>
-        <div class="stat-box">
-            <div id="stageDisplay">Floor 1</div>
-            <div id="xpDisplay" style="color: gold; font-size: 0.8em;">XP: 0</div>
-        </div>
+<div id="ui">
+    <div>❤️ <span id="hp">100</span> | 🛡️ <span id="lvl">1</span></div>
+    <div>✨ <span id="spell">Basic</span> | 📜 <span id="xp">0</span></div>
+</div>
+<div id="notif">Level Up!</div>
+<canvas id="game"></canvas>
+
+<div id="controls">
+    <div class="dpad" id="movePad">
+        <div class="btn up" data-k="w">⬆️</div><div class="btn down" data-k="s">⬇️</div>
+        <div class="btn left" data-k="a">⬅️</div><div class="btn right" data-k="d">➡️</div>
     </div>
-
-    <div id="notification">Notification</div>
-
-    <canvas id="gameCanvas"></canvas>
-
-    <div id="controlsLayer">
-        <div class="control-group" id="moveGroup">
-            <div class="dpad-btn up" data-key="w">⬆️</div>
-            <div class="dpad-btn down" data-key="s">⬇️</div>
-            <div class="dpad-btn left" data-key="a">⬅️</div>
-            <div class="dpad-btn right" data-key="d">➡️</div>
-        </div>
-        
-        <div id="actionContainer">
-            <button id="dashBtn" class="action-btn">DASH (Space)</button>
-        </div>
-
-        <div class="control-group" id="fireGroup">
-            <div class="dpad-btn up" data-key="ArrowUp">🔥</div>
-            <div class="dpad-btn down" data-key="ArrowDown">🔥</div>
-            <div class="dpad-btn left" data-key="ArrowLeft">🔥</div>
-            <div class="dpad-btn right" data-key="ArrowRight">🔥</div>
-        </div>
+    <div id="dashBtn">DASH</div>
+    <div class="dpad" id="firePad">
+        <div class="btn up" data-k="ArrowUp">🔥</div><div class="btn down" data-k="ArrowDown">🔥</div>
+        <div class="btn left" data-k="ArrowLeft">🔥</div><div class="btn right" data-k="ArrowRight">🔥</div>
     </div>
 </div>
 
 <script>
-    // --- ENGINE CONFIGURATION ---
-    const CONFIG = {
-        TILE_SIZE: 48,
-        MAP_SIZE: 25, 
-        ANIMATION_SPEED: 0.2, 
-        DASH_COOLDOWN: 2,
-        TICK_RATE: 60
-    };
+const C = document.getElementById('game');
+const X = C.getContext('2d');
+const TILE = 48; // Tile size
+let W, H;
 
-    const canvas = document.getElementById('gameCanvas');
-    const ctx = canvas.getContext('2d');
-    
-    // --- STATE MANAGEMENT ---
-    let gameState = {
-        stage: 1,
-        camera: { x: 0, y: 0 },
-        exit: { x: 0, y: 0, unlocked: false },
-        map: [],
-        particles: [],
-        popups: [],
-        projectiles: [],
-        loot: [],
-        enemies: [],
-        lastTime: 0,
-        globalTime: 0
-    };
+const STATE = {
+    map: [], size: 30, stage: 1,
+    cam: { x:0, y:0 },
+    keys: {},
+    particles: [],
+    mobs: [],
+    loot: [],
+    shots: [],
+    popups: [],
+    exit: {x:0, y:0, open:false}
+};
 
-    let player = {
-        gridX: 1, gridY: 1, 
-        renderX: 1, renderY: 1, 
-        health: 100, maxHealth: 100,
-        xp: 0, level: 1,
-        dashTimer: 0,
-        isMoving: false,
-        attackCooldown: 0
-    };
+const PL = {
+    x: 1, y: 1, // Logical grid pos
+    rx: 1, ry: 1, // Render pos (smooth)
+    hp: 100, maxHp: 100,
+    xp: 0, lvl: 1,
+    dash: 0, 
+    spell: { name: "Magic Bolt", color: "#aaf", dmg: 10, type: "basic" }
+};
 
-    let inputState = {
-        up: false, down: false, left: false, right: false,
-        fireUp: false, fireDown: false, fireLeft: false, fireRight: false,
-        dash: false
-    };
+// --- INPUT HANDLING ---
+window.onkeydown = e => STATE.keys[e.key] = true;
+window.onkeyup = e => STATE.keys[e.key] = false;
+window.onresize = resize;
 
-    // --- INITIALIZATION ---
-    function init() {
-        resize();
-        window.addEventListener('resize', resize);
-        startLevel();
-        requestAnimationFrame(gameLoop);
+function resize() {
+    W = C.width = window.innerWidth;
+    H = C.height = window.innerHeight;
+}
+
+// --- MAIN LOOP ---
+function init() {
+    resize();
+    genLevel();
+    loop();
+}
+
+function loop() {
+    update();
+    draw();
+    requestAnimationFrame(loop);
+}
+
+function update() {
+    // 1. Player Movement & Smoothing
+    let dx = 0, dy = 0;
+    if (STATE.keys.w) dy = -1;
+    if (STATE.keys.s) dy = 1;
+    if (STATE.keys.a) dx = -1;
+    if (STATE.keys.d) dx = 1;
+
+    // Movement Logic
+    if ((dx || dy) && !PL.moving) {
+        let nx = PL.x + dx, ny = PL.y + dy;
+        if (!isWall(nx, ny)) {
+            PL.x = nx; PL.y = ny;
+            PL.moving = true;
+            // Check exit
+            if (nx === STATE.exit.x && ny === STATE.exit.y && STATE.exit.open) nextStage();
+        }
     }
 
-    function resize() {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-    }
+    // Smooth Lerp (Visuals catch up to logic)
+    PL.rx += (PL.x - PL.rx) * 0.2;
+    PL.ry += (PL.y - PL.ry) * 0.2;
+    if (Math.abs(PL.x - PL.rx) < 0.05) PL.moving = false;
 
-    function startLevel() {
-        // Fix 1: Ensure Map is Connected
-        gameState.map = generateConnectedMap();
+    // Camera Follow
+    STATE.cam.x += ((PL.rx * TILE - W/2) - STATE.cam.x) * 0.1;
+    STATE.cam.y += ((PL.ry * TILE - H/2) - STATE.cam.y) * 0.1;
+
+    // 2. Dash Logic
+    if (PL.dash > 0) PL.dash--;
+    if (STATE.keys[' '] && PL.dash <= 0) {
+        // Dash Direction is based on last move or default forward
+        let ddx = dx || (Math.random() > 0.5 ? 1 : -1); 
+        let ddy = dy || 0;
         
-        // Setup Player
-        let startPos = getRandomFloor();
-        player.gridX = startPos.x;
-        player.gridY = startPos.y;
-        player.renderX = startPos.x;
-        player.renderY = startPos.y;
+        // Attempt long jump (2 tiles)
+        let tx = PL.x + ddx * 2;
+        let ty = PL.y + ddy * 2;
         
-        // Setup Exit
-        gameState.exit = getRandomFloor();
-        while(dist(gameState.exit.x, gameState.exit.y, player.gridX, player.gridY) < 10) {
-            gameState.exit = getRandomFloor();
-        }
-        gameState.exit.unlocked = false;
-
-        // Spawn Enemies
-        gameState.enemies = [];
-        for(let i=0; i<5 + gameState.stage; i++) {
-            let pos = getRandomFloor();
-            if(dist(pos.x, pos.y, player.gridX, player.gridY) > 5) {
-                gameState.enemies.push(createEnemy(pos.x, pos.y));
-            }
-        }
-
-        // Fix 2: Spawn Loot
-        gameState.loot = [];
-        for(let i=0; i<3; i++) {
-            let pos = getRandomFloor();
-            // Randomly choose potion or scroll
-            let type = Math.random() > 0.5 ? 'potion' : 'scroll';
-            gameState.loot.push({ 
-                x: pos.x, y: pos.y, 
-                type: type, 
-                symbol: type === 'potion' ? '🧪' : '📜',
-                floatOffset: Math.random() * Math.PI * 2 
-            });
-        }
-        
-        // Center Camera
-        gameState.camera.x = player.renderX * CONFIG.TILE_SIZE - canvas.width/2;
-        gameState.camera.y = player.renderY * CONFIG.TILE_SIZE - canvas.height/2;
-        
-        showNotification(`Level ${gameState.stage} - Find the Exit!`);
-    }
-
-    // --- MAP GENERATION (FIXED) ---
-    function generateConnectedMap() {
-        let map;
-        let isValid = false;
-        let attempts = 0;
-
-        while (!isValid && attempts < 100) {
-            map = createCellularAutomataMap();
-            if (checkConnectivity(map)) {
-                isValid = true;
-            }
-            attempts++;
-        }
-        
-        if (!isValid) {
-            // Fallback: Fill everything with floor if generation fails
-            map = map.map(row => row.map(() => 0)); 
-            // Add border
-            for(let y=0; y<CONFIG.MAP_SIZE; y++) {
-                map[y][0] = 1; map[y][CONFIG.MAP_SIZE-1] = 1;
-            }
-            for(let x=0; x<CONFIG.MAP_SIZE; x++) {
-                map[0][x] = 1; map[CONFIG.MAP_SIZE-1][x] = 1;
-            }
-        }
-        return map;
-    }
-
-    function createCellularAutomataMap() {
-        let map = [];
-        for (let y = 0; y < CONFIG.MAP_SIZE; y++) {
-            let row = [];
-            for (let x = 0; x < CONFIG.MAP_SIZE; x++) {
-                if(x===0 || y===0 || x===CONFIG.MAP_SIZE-1 || y===CONFIG.MAP_SIZE-1) row.push(1);
-                else row.push(Math.random() < 0.45 ? 1 : 0);
-            }
-            map.push(row);
-        }
-        for(let i=0; i<4; i++) {
-            let nextMap = JSON.parse(JSON.stringify(map));
-            for(let y=1; y<CONFIG.MAP_SIZE-1; y++) {
-                for(let x=1; x<CONFIG.MAP_SIZE-1; x++) {
-                    let walls = 0;
-                    for(let dy=-1; dy<=1; dy++) {
-                        for(let dx=-1; dx<=1; dx++) {
-                            if(map[y+dy][x+dx] === 1) walls++;
-                        }
-                    }
-                    if(walls > 4) nextMap[y][x] = 1;
-                    else if(walls < 4) nextMap[y][x] = 0;
-                }
-            }
-            map = nextMap;
-        }
-        return map;
-    }
-
-    // Flood Fill to check if the map is playable
-    function checkConnectivity(map) {
-        let startX = -1, startY = -1;
-        let totalFloors = 0;
-
-        // Find a starting floor tile and count floors
-        for(let y=0; y<CONFIG.MAP_SIZE; y++) {
-            for(let x=0; x<CONFIG.MAP_SIZE; x++) {
-                if(map[y][x] === 0) {
-                    if(startX === -1) { startX = x; startY = y; }
-                    totalFloors++;
-                }
-            }
-        }
-
-        if(startX === -1) return false; // No floors?
-
-        // BFS Flood Fill
-        let visited = new Set();
-        let queue = [{x: startX, y: startY}];
-        visited.add(`${startX},${startY}`);
-        let reachedFloors = 0;
-
-        while(queue.length > 0) {
-            let curr = queue.shift();
-            reachedFloors++;
-
-            const dirs = [{x:0, y:1}, {x:0, y:-1}, {x:1, y:0}, {x:-1, y:0}];
-            for(let d of dirs) {
-                let nx = curr.x + d.x;
-                let ny = curr.y + d.y;
-                if(nx >= 0 && nx < CONFIG.MAP_SIZE && ny >= 0 && ny < CONFIG.MAP_SIZE) {
-                    if(map[ny][nx] === 0 && !visited.has(`${nx},${ny}`)) {
-                        visited.add(`${nx},${ny}`);
-                        queue.push({x: nx, y: ny});
-                    }
-                }
-            }
-        }
-
-        // If we reached at least 90% of the floors, it's a good map
-        return reachedFloors / totalFloors > 0.9; 
-    }
-
-    // --- GAME LOOP ---
-    function gameLoop(timestamp) {
-        const dt = (timestamp - gameState.lastTime) / 1000;
-        gameState.lastTime = timestamp;
-        gameState.globalTime += dt;
-
-        update(dt);
-        draw();
-        
-        requestAnimationFrame(gameLoop);
-    }
-
-    function update(dt) {
-        // Player Movement
-        if (!player.isMoving) {
-            let dx = 0, dy = 0;
-            if (inputState.up) dy = -1;
-            else if (inputState.down) dy = 1;
-            else if (inputState.left) dx = -1;
-            else if (inputState.right) dx = 1;
-
-            if (dx !== 0 || dy !== 0) attemptMove(dx, dy);
-        }
-
-        // Smooth Lerp
-        player.renderX += (player.gridX - player.renderX) * CONFIG.ANIMATION_SPEED * (dt * 60);
-        player.renderY += (player.gridY - player.renderY) * CONFIG.ANIMATION_SPEED * (dt * 60);
-        if(Math.abs(player.gridX - player.renderX) < 0.01) player.renderX = player.gridX;
-        if(Math.abs(player.gridY - player.renderY) < 0.01) player.renderY = player.gridY;
-        player.isMoving = (Math.abs(player.gridX - player.renderX) > 0.1 || Math.abs(player.gridY - player.renderY) > 0.1);
-
-        // Camera Follow
-        const targetCamX = player.renderX * CONFIG.TILE_SIZE - canvas.width / 2 + CONFIG.TILE_SIZE/2;
-        const targetCamY = player.renderY * CONFIG.TILE_SIZE - canvas.height/2 + CONFIG.TILE_SIZE/2;
-        gameState.camera.x += (targetCamX - gameState.camera.x) * 0.1;
-        gameState.camera.y += (targetCamY - gameState.camera.y) * 0.1;
-
-        // Cooldowns
-        player.dashTimer -= dt;
-        player.attackCooldown -= dt;
-
-        // Dash Input
-        if (inputState.dash && player.dashTimer <= 0) performDash();
-
-        // Shooting
-        if (player.attackCooldown <= 0) {
-            if (inputState.fireUp) fireProjectile(0, -1);
-            else if (inputState.fireDown) fireProjectile(0, 1);
-            else if (inputState.fireLeft) fireProjectile(-1, 0);
-            else if (inputState.fireRight) fireProjectile(1, 0);
-        }
-
-        // Projectiles
-        for (let i = gameState.projectiles.length - 1; i >= 0; i--) {
-            let p = gameState.projectiles[i];
-            p.x += p.dx * p.speed * dt;
-            p.y += p.dy * p.speed * dt;
+        if (!isWall(tx, ty)) {
+            PL.x = tx; PL.y = ty;
+            PL.rx = tx; PL.ry = ty; // Snap visual
+            PL.dash = 60; // Cooldown
+            addPopup(PL.rx, PL.ry, "DASH!", "cyan");
             
-            if (isSolid(Math.floor(p.x), Math.floor(p.y))) {
-                addParticle(p.x, p.y, 'orange', 5);
-                gameState.projectiles.splice(i, 1);
-                continue;
+            // DIRECTIONAL PARTICLES: Emit opposite to movement
+            for(let i=0; i<15; i++) {
+                // Particles trail BEHIND the player
+                addPart(PL.rx * TILE + 24, PL.ry * TILE + 24, "white", -ddx * 4, -ddy * 4);
             }
+        }
+    }
 
-            let hit = false;
-            for (let e of gameState.enemies) {
-                if (dist(p.x, p.y, e.x, e.y) < 0.6) {
-                    e.health -= 15;
-                    addPopup(e.x, e.y, "-15");
-                    addParticle(e.x, e.y, 'red', 8);
-                    if (e.health <= 0) killEnemy(e);
-                    hit = true;
-                    break;
-                }
+    // 3. Shooting
+    if (PL.cool > 0) PL.cool--;
+    if (PL.cool <= 0) {
+        let sx=0, sy=0;
+        if (STATE.keys.ArrowUp) sy = -1;
+        else if (STATE.keys.ArrowDown) sy = 1;
+        else if (STATE.keys.ArrowLeft) sx = -1;
+        else if (STATE.keys.ArrowRight) sx = 1;
+
+        if (sx || sy) {
+            STATE.shots.push({ x: PL.rx, y: PL.ry, vx: sx*0.3, vy: sy*0.3, life: 60, spell: PL.spell });
+            PL.cool = 15;
+        }
+    }
+
+    // 4. Projectiles
+    STATE.shots.forEach((s, i) => {
+        s.x += s.vx; s.y += s.vy;
+        s.life--;
+        addPart(s.x*TILE+24, s.y*TILE+24, s.spell.color, -s.vx*5, -s.vy*5, 0.5); // Trail
+
+        // Wall Hit
+        if (isWall(Math.round(s.x), Math.round(s.y))) s.life = 0;
+
+        // Enemy Hit
+        STATE.mobs.forEach(m => {
+            if (Math.hypot(m.x - s.x, m.y - s.y) < 0.6) {
+                m.hp -= s.spell.dmg;
+                s.life = 0;
+                addPopup(m.x, m.y, s.spell.dmg, "orange");
+                if (m.hp <= 0) killMob(m);
             }
-            if(hit) gameState.projectiles.splice(i, 1);
-            if(dist(p.x, p.y, player.renderX, player.renderY) > 15) gameState.projectiles.splice(i, 1);
+        });
+
+        if (s.life <= 0) STATE.shots.splice(i, 1);
+    });
+
+    // 5. Mobs Logic & MERGING
+    STATE.mobs.forEach((m, i) => {
+        // Simple Chase
+        let dis = Math.hypot(PL.x - m.x, PL.y - m.y);
+        if (dis < 8) {
+            m.x += (PL.x - m.x) * 0.03;
+            m.y += (PL.y - m.y) * 0.03;
         }
 
-        // Enemy Logic
-        gameState.enemies.forEach(e => {
-            e.renderX += (e.x - e.renderX) * 0.1;
-            e.renderY += (e.y - e.renderY) * 0.1;
-            
-            e.moveTimer -= dt;
-            if (e.moveTimer <= 0 && dist(e.x, e.y, player.gridX, player.gridY) < 8) {
-                let dx = 0, dy = 0;
-                if (Math.abs(player.gridX - e.x) > Math.abs(player.gridY - e.y)) {
-                    dx = player.gridX > e.x ? 1 : -1;
-                } else {
-                    dy = player.gridY > e.y ? 1 : -1;
-                }
+        // Damage Player
+        if (dis < 0.5) {
+            PL.hp -= 0.5;
+            if(Math.random()<0.1) addPopup(PL.rx, PL.ry, "-1", "red");
+            if(PL.hp <= 0) location.reload(); 
+        }
+
+        // MERGING LOGIC: Check collisions with other mobs
+        for (let j = i + 1; j < STATE.mobs.length; j++) {
+            let other = STATE.mobs[j];
+            if (Math.hypot(m.x - other.x, m.y - other.y) < 0.5 && !m.merged && !other.merged) {
+                // MERGE!
+                m.hp += other.hp;
+                m.maxHp += other.maxHp;
+                m.scale = (m.scale || 1) + 0.5; // Grow bigger
+                m.color = "purple"; // Change color
+                addPopup(m.x, m.y, "MERGE!", "magenta");
                 
-                if (e.x + dx === player.gridX && e.y + dy === player.gridY) {
-                    player.health -= 5;
-                    addPopup(player.renderX, player.renderY, "-5", "red");
-                    updateUI();
-                    if(player.health <= 0) resetGame();
-                    e.moveTimer = 1.0;
-                } else if (!isSolid(e.x + dx, e.y + dy) && !gameState.enemies.some(other => other !== e && other.x === e.x + dx && other.y === e.y + dy)) {
-                    e.x += dx;
-                    e.y += dy;
-                    e.moveTimer = 1.5;
-                }
-            }
-        });
-
-        // Loot Collision (Fix 2)
-        for(let i = gameState.loot.length - 1; i >= 0; i--) {
-            let item = gameState.loot[i];
-            if(dist(player.gridX, player.gridY, item.x, item.y) < 0.8) {
-                if(item.type === 'potion') {
-                    player.health = Math.min(100, player.health + 30);
-                    addPopup(player.renderX, player.renderY, "Healed!", "lime");
-                    showNotification("Picked up Health Potion");
-                } else if (item.type === 'scroll') {
-                    player.xp += 50;
-                    addPopup(player.renderX, player.renderY, "+50 XP", "gold");
-                    showNotification("Picked up Ancient Scroll");
-                }
-                addParticle(item.x, item.y, 'yellow', 10);
-                gameState.loot.splice(i, 1);
-                updateUI();
+                STATE.mobs.splice(j, 1); // Remove other
+                m.merged = true; // Cooldown flag
+                setTimeout(() => m.merged = false, 2000);
             }
         }
+    });
 
-        // Particles
-        gameState.particles.forEach((p, i) => {
-            p.life -= dt;
-            p.x += p.vx * dt;
-            p.y += p.vy * dt;
-            if(p.life <= 0) gameState.particles.splice(i, 1);
-        });
-        
-        gameState.popups.forEach((p, i) => {
-            p.life -= dt;
-            p.y -= dt * 1;
-            if(p.life <= 0) gameState.popups.splice(i, 1);
-        });
-
-        updateUI();
-    }
-
-    function attemptMove(dx, dy) {
-        const nx = player.gridX + dx;
-        const ny = player.gridY + dy;
-
-        if (!isSolid(nx, ny)) {
-            player.gridX = nx;
-            player.gridY = ny;
-            if (nx === gameState.exit.x && ny === gameState.exit.y && gameState.exit.unlocked) {
-                gameState.stage++;
-                startLevel();
+    // 6. Loot Pickup & SPELL MIXING
+    STATE.loot.forEach((l, i) => {
+        if (Math.hypot(PL.rx - l.x, PL.ry - l.y) < 0.8) {
+            if (l.type === 'spell') {
+                mixSpell(l.variant);
+            } else if (l.type === 'heal') {
+                PL.hp = Math.min(PL.maxHp, PL.hp + 20);
+                addPopup(PL.rx, PL.ry, "+20 HP", "lime");
             }
+            STATE.loot.splice(i, 1);
         }
+    });
+
+    // Particles
+    STATE.particles.forEach((p, i) => {
+        p.x += p.vx; p.y += p.vy; p.life -= 0.05;
+        if (p.life <= 0) STATE.particles.splice(i, 1);
+    });
+    
+    // UI Updates
+    document.getElementById('hp').innerText = Math.floor(PL.hp);
+    document.getElementById('spell').innerText = PL.spell.name;
+}
+
+// --- SPELL MIXING SYSTEM ---
+function mixSpell(newType) {
+    let current = PL.spell.type;
+    
+    // Logic: Combine types
+    if (current === 'basic') {
+        if (newType === 'fire') setSpell('Fireball', 'orange', 15, 'fire');
+        if (newType === 'ice') setSpell('Ice Shard', 'cyan', 12, 'ice');
+    } 
+    else if (current === 'fire') {
+        if (newType === 'ice') setSpell('Frostfire', 'violet', 25, 'hybrid'); // MIX!
+        else setSpell('Inferno', 'red', 20, 'fire'); // Upgrade
     }
-
-    function performDash() {
-        let dx = 0, dy = 0;
-        if (inputState.up) dy = -2;
-        else if (inputState.down) dy = 2;
-        else if (inputState.left) dx = -2;
-        else if (inputState.right) dx = 2;
-        else dx = 2; 
-
-        let targetX = player.gridX + dx;
-        let targetY = player.gridY + dy;
-        
-        if (!isSolid(targetX, targetY)) {
-            // Fix 3: Dash visual is now particle based, not a persistent text
-            addParticle(player.renderX, player.renderY, 'cyan', 8);
-            addParticle(player.renderX + dx/2, player.renderY + dy/2, 'white', 8);
-            
-            player.gridX = targetX;
-            player.gridY = targetY;
-            player.renderX = targetX; // Snap for visual crispness on dash
-            player.renderY = targetY;
-            player.dashTimer = CONFIG.DASH_COOLDOWN;
-            addPopup(player.renderX, player.renderY, "DASH!", "cyan");
-        }
+    else if (current === 'ice') {
+        if (newType === 'fire') setSpell('Frostfire', 'violet', 25, 'hybrid'); // MIX!
+        else setSpell('Blizzard', 'blue', 18, 'ice'); // Upgrade
     }
-
-    function fireProjectile(dx, dy) {
-        gameState.projectiles.push({
-            x: player.renderX + 0.5,
-            y: player.renderY + 0.5,
-            dx: dx, dy: dy, speed: 8, life: 2
-        });
-        player.attackCooldown = 0.3;
-    }
-
-    function killEnemy(enemy) {
-        gameState.enemies = gameState.enemies.filter(e => e !== enemy);
-        player.xp += 20;
-        addPopup(enemy.x, enemy.y, "+20 XP", "gold");
-        if(gameState.enemies.length === 0) {
-            gameState.exit.unlocked = true;
-            showNotification("Exit Unlocked!");
-        }
-    }
-
-    function createEnemy(x, y) {
-        return {
-            x: x, y: y, renderX: x, renderY: y,
-            health: 30, moveTimer: 0, type: 'slime'
-        };
-    }
-
-    function isSolid(x, y) {
-        if (x < 0 || y < 0 || x >= CONFIG.MAP_SIZE || y >= CONFIG.MAP_SIZE) return true;
-        return gameState.map[y][x] === 1;
-    }
-
-    function getRandomFloor() {
-        let x, y;
-        let attempts = 0;
-        do {
-            x = Math.floor(Math.random() * CONFIG.MAP_SIZE);
-            y = Math.floor(Math.random() * CONFIG.MAP_SIZE);
-            attempts++;
-        } while (gameState.map[y][x] === 1 && attempts < 100);
-        return {x, y};
-    }
-
-    function resetGame() {
-        alert("You Died! Restarting...");
-        player.health = 100;
-        player.xp = 0;
-        gameState.stage = 1;
-        startLevel();
-    }
-
-    // --- DRAWING ---
-    function draw() {
-        ctx.fillStyle = '#111';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.save();
-        ctx.translate(-gameState.camera.x, -gameState.camera.y);
-
-        const startCol = Math.floor(gameState.camera.x / CONFIG.TILE_SIZE);
-        const endCol = startCol + (canvas.width / CONFIG.TILE_SIZE) + 1;
-        const startRow = Math.floor(gameState.camera.y / CONFIG.TILE_SIZE);
-        const endRow = startRow + (canvas.height / CONFIG.TILE_SIZE) + 1;
-
-        for (let y = startRow; y <= endRow; y++) {
-            for (let x = startCol; x <= endCol; x++) {
-                if (x >= 0 && x < CONFIG.MAP_SIZE && y >= 0 && y < CONFIG.MAP_SIZE) {
-                    if (gameState.map[y][x] === 1) {
-                        ctx.fillStyle = '#444';
-                        ctx.fillRect(x * CONFIG.TILE_SIZE, y * CONFIG.TILE_SIZE, CONFIG.TILE_SIZE, CONFIG.TILE_SIZE);
-                        ctx.fillStyle = '#222'; 
-                        ctx.fillRect(x * CONFIG.TILE_SIZE, y * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE - 5, CONFIG.TILE_SIZE, 5);
-                    } else {
-                        ctx.fillStyle = '#2a2a2a';
-                        ctx.fillRect(x * CONFIG.TILE_SIZE, y * CONFIG.TILE_SIZE, CONFIG.TILE_SIZE, CONFIG.TILE_SIZE);
-                        ctx.strokeStyle = '#333';
-                        ctx.lineWidth = 1;
-                        ctx.strokeRect(x * CONFIG.TILE_SIZE, y * CONFIG.TILE_SIZE, CONFIG.TILE_SIZE, CONFIG.TILE_SIZE);
-                    }
-                }
-            }
-        }
-
-        // Exit
-        ctx.font = `${CONFIG.TILE_SIZE}px Arial`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(gameState.exit.unlocked ? "🚪" : "🔒", 
-            gameState.exit.x * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2, 
-            gameState.exit.y * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2);
-
-        // Loot Drawing (Fix 2)
-        gameState.loot.forEach(l => {
-            const floatY = Math.sin(gameState.globalTime * 3 + l.floatOffset) * 5;
-            ctx.font = '24px Arial';
-            ctx.fillText(l.symbol, 
-                l.x * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2, 
-                l.y * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2 + floatY
-            );
-        });
-
-        // Enemies
-        gameState.enemies.forEach(e => {
-            const screenX = e.renderX * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2;
-            const screenY = e.renderY * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2;
-            
-            ctx.fillStyle = 'rgba(0,0,0,0.5)';
-            ctx.beginPath();
-            ctx.ellipse(screenX, screenY + 20, 15, 5, 0, 0, Math.PI*2);
-            ctx.fill();
-
-            ctx.font = '30px Arial';
-            ctx.fillText("👾", screenX, screenY);
-            
-            const hpPct = e.health / 30;
-            ctx.fillStyle = 'red';
-            ctx.fillRect(screenX - 15, screenY - 30, 30, 4);
-            ctx.fillStyle = 'lime';
-            ctx.fillRect(screenX - 15, screenY - 30, 30 * hpPct, 4);
-        });
-
-        // Player (Fix 3: Removed cloud text logic)
-        const pScreenX = player.renderX * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2;
-        const pScreenY = player.renderY * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2;
-        
-        ctx.fillStyle = 'rgba(0,0,0,0.5)';
-        ctx.beginPath();
-        ctx.ellipse(pScreenX, pScreenY + 20, 15, 5, 0, 0, Math.PI*2);
-        ctx.fill();
-
-        ctx.font = '35px Arial';
-        ctx.fillText("🧙‍♂️", pScreenX, pScreenY);
-
-        // Projectiles
-        gameState.projectiles.forEach(p => {
-            ctx.fillStyle = '#aaf';
-            ctx.shadowBlur = 10;
-            ctx.shadowColor = '#aaf';
-            ctx.beginPath();
-            ctx.arc(p.x * CONFIG.TILE_SIZE, p.y * CONFIG.TILE_SIZE, 6, 0, Math.PI*2);
-            ctx.fill();
-            ctx.shadowBlur = 0;
-        });
-
-        // Particles
-        gameState.particles.forEach(p => {
-            ctx.fillStyle = p.color;
-            ctx.globalAlpha = p.life;
-            ctx.beginPath();
-            ctx.arc(p.x * CONFIG.TILE_SIZE, p.y * CONFIG.TILE_SIZE, p.size, 0, Math.PI*2);
-            ctx.fill();
-            ctx.globalAlpha = 1;
-        });
-        
-        // Popups
-        gameState.popups.forEach(p => {
-            ctx.fillStyle = p.color || 'white';
-            ctx.font = 'bold 20px Arial';
-            ctx.strokeStyle = 'black';
-            ctx.lineWidth = 2;
-            ctx.strokeText(p.text, p.x * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2, p.y * CONFIG.TILE_SIZE);
-            ctx.fillText(p.text, p.x * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2, p.y * CONFIG.TILE_SIZE);
-        });
-
-        ctx.restore();
-
-        // Lighting
-        const centerX = (player.renderX * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2) - gameState.camera.x;
-        const centerY = (player.renderY * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2) - gameState.camera.y;
-        
-        const gradient = ctx.createRadialGradient(centerX, centerY, 50, centerX, centerY, 400);
-        gradient.addColorStop(0, 'rgba(0,0,0,0)');
-        gradient.addColorStop(0.8, 'rgba(0,0,0,0.6)');
-        gradient.addColorStop(1, 'rgba(0,0,0,0.95)');
-        
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-    }
-
-    // --- UTILS ---
-    function addParticle(x, y, color, count) {
-        for(let i=0; i<count; i++) {
-            gameState.particles.push({
-                x: x + 0.5, y: y + 0.5,
-                vx: (Math.random() - 0.5) * 4,
-                vy: (Math.random() - 0.5) * 4,
-                life: 1.0,
-                color: color,
-                size: Math.random() * 4 + 1
-            });
-        }
-    }
-
-    function addPopup(x, y, text, color) {
-        gameState.popups.push({ x, y, text, color, life: 1.0 });
-    }
-
-    function showNotification(text) {
-        const el = document.getElementById('notification');
-        el.textContent = text;
-        el.style.opacity = 1;
-        setTimeout(() => el.style.opacity = 0, 2000);
+    else if (current === 'hybrid') {
+        setSpell('Omega Beam', 'white', 50, 'god'); // MAX LEVEL
     }
     
-    function updateUI() {
-        document.getElementById('healthDisplay').textContent = `❤️ ${Math.floor(player.health)}/100`;
-        document.getElementById('xpDisplay').textContent = `XP: ${player.xp}`;
-        document.getElementById('stageDisplay').textContent = `Floor ${gameState.stage}`;
-        document.getElementById('manaDisplay').textContent = player.dashTimer <= 0 ? "DASH READY (Space)" : `Dash: ${player.dashTimer.toFixed(1)}s`;
-        
-        const dashBtn = document.getElementById('dashBtn');
-        if(player.dashTimer > 0) {
-            dashBtn.style.background = '#555';
-            dashBtn.style.boxShadow = 'none';
-        } else {
-            dashBtn.style.background = '#e24a4a';
-            dashBtn.style.boxShadow = '0 4px 0 #992c2c';
+    addPopup(PL.rx, PL.ry, "SPELL MIX!", "gold");
+    notify(`Equipped: ${PL.spell.name}`);
+}
+
+function setSpell(name, color, dmg, type) {
+    PL.spell = { name, color, dmg, type };
+}
+
+// --- DRAWING ---
+function draw() {
+    // Clear
+    X.fillStyle = "#111";
+    X.fillRect(0, 0, W, H);
+
+    X.save();
+    X.translate(-STATE.cam.x, -STATE.cam.y);
+
+    // Map (Optimized)
+    let cx = Math.floor(STATE.cam.x / TILE);
+    let cy = Math.floor(STATE.cam.y / TILE);
+    for (let y = cy; y < cy + H/TILE + 1; y++) {
+        for (let x = cx; x < cx + W/TILE + 1; x++) {
+            if (isWall(x, y)) {
+                X.fillStyle = "#444";
+                X.fillRect(x*TILE, y*TILE, TILE, TILE);
+                X.fillStyle = "#222"; // Shadow
+                X.fillRect(x*TILE, y*TILE+40, TILE, 8);
+            } else {
+                X.strokeStyle = "#222";
+                X.strokeRect(x*TILE, y*TILE, TILE, TILE);
+            }
         }
     }
 
-    function dist(x1, y1, x2, y2) {
-        return Math.sqrt((x2-x1)**2 + (y2-y1)**2);
+    // Exit
+    if (STATE.exit.open) {
+        X.font = "40px serif";
+        X.fillText("🌀", STATE.exit.x*TILE + 4, STATE.exit.y*TILE + 36);
     }
 
-    // --- INPUT ---
-    window.addEventListener('keydown', e => {
-        if(e.key === 'w') inputState.up = true;
-        if(e.key === 's') inputState.down = true;
-        if(e.key === 'a') inputState.left = true;
-        if(e.key === 'd') inputState.right = true;
-        if(e.key === 'ArrowUp') inputState.fireUp = true;
-        if(e.key === 'ArrowDown') inputState.fireDown = true;
-        if(e.key === 'ArrowLeft') inputState.fireLeft = true;
-        if(e.key === 'ArrowRight') inputState.fireRight = true;
-        if(e.key === ' ') inputState.dash = true;
+    // Loot
+    STATE.loot.forEach(l => {
+        X.font = "30px serif";
+        X.fillText(l.icon, l.x*TILE+10, l.y*TILE+35);
     });
 
-    window.addEventListener('keyup', e => {
-        if(e.key === 'w') inputState.up = false;
-        if(e.key === 's') inputState.down = false;
-        if(e.key === 'a') inputState.left = false;
-        if(e.key === 'd') inputState.right = false;
-        if(e.key === 'ArrowUp') inputState.fireUp = false;
-        if(e.key === 'ArrowDown') inputState.fireDown = false;
-        if(e.key === 'ArrowLeft') inputState.fireLeft = false;
-        if(e.key === 'ArrowRight') inputState.fireRight = false;
-        if(e.key === ' ') inputState.dash = false;
+    // Mobs
+    STATE.mobs.forEach(m => {
+        let s = (m.scale || 1) * TILE;
+        X.fillStyle = m.color || "red";
+        X.fillRect(m.x*TILE - s/2 + 24, m.y*TILE - s/2 + 24, s, s);
+        // HP Bar
+        X.fillStyle = "lime";
+        X.fillRect(m.x*TILE, m.y*TILE - 10, TILE * (m.hp/m.maxHp), 4);
     });
 
-    const buttons = document.querySelectorAll('.dpad-btn');
-    buttons.forEach(btn => {
-        const key = btn.getAttribute('data-key');
-        const setKey = (active) => {
-            if(key === 'w') inputState.up = active;
-            if(key === 's') inputState.down = active;
-            if(key === 'a') inputState.left = active;
-            if(key === 'd') inputState.right = active;
-            if(key === 'ArrowUp') inputState.fireUp = active;
-            if(key === 'ArrowDown') inputState.fireDown = active;
-            if(key === 'ArrowLeft') inputState.fireLeft = active;
-            if(key === 'ArrowRight') inputState.fireRight = active;
-        };
+    // Player
+    X.font = "40px serif";
+    X.fillText("🧙‍♂️", PL.rx*TILE + 4, PL.ry*TILE + 36);
 
-        btn.addEventListener('pointerdown', (e) => { e.preventDefault(); btn.classList.add('pressed'); setKey(true); });
-        btn.addEventListener('pointerup', (e) => { e.preventDefault(); btn.classList.remove('pressed'); setKey(false); });
-        btn.addEventListener('pointerleave', (e) => { btn.classList.remove('pressed'); setKey(false); });
+    // Particles
+    STATE.particles.forEach(p => {
+        X.fillStyle = p.color;
+        X.globalAlpha = p.life;
+        X.beginPath();
+        X.arc(p.x, p.y, p.r || 4, 0, Math.PI*2);
+        X.fill();
+    });
+    X.globalAlpha = 1;
+
+    // Popups
+    STATE.popups.forEach((p, i) => {
+        p.life--;
+        p.y -= 0.05;
+        X.fillStyle = p.c;
+        X.font = "bold 20px sans-serif";
+        X.fillText(p.t, p.x*TILE, p.y*TILE);
+        if(p.life <= 0) STATE.popups.splice(i,1);
     });
 
-    const dashBtn = document.getElementById('dashBtn');
-    dashBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); inputState.dash = true; });
-    dashBtn.addEventListener('pointerup', (e) => { e.preventDefault(); inputState.dash = false; });
+    X.restore();
+}
+
+// --- GENERATION (GUARANTEED CONNECTED) ---
+function genLevel() {
+    STATE.size = 20 + STATE.stage * 5;
+    let m = [];
     
-    init();
+    // 1. Random Noise
+    for(let y=0; y<STATE.size; y++) {
+        let row = [];
+        for(let x=0; x<STATE.size; x++) {
+            if (x===0 || y===0 || x===STATE.size-1 || y===STATE.size-1) row.push(1);
+            else row.push(Math.random() > 0.4 ? 1 : 0);
+        }
+        m.push(row);
+    }
 
+    // 2. Cellular Automata (Smooth)
+    for(let i=0; i<5; i++) {
+        let nm = JSON.parse(JSON.stringify(m));
+        for(let y=1; y<STATE.size-1; y++) for(let x=1; x<STATE.size-1; x++) {
+            let n = 0;
+            for(let dy=-1; dy<=1; dy++) for(let dx=-1; dx<=1; dx++) if(m[y+dy][x+dx]) n++;
+            if(n >= 5) nm[y][x] = 1; else if(n <= 3) nm[y][x] = 0;
+        }
+        m = nm;
+    }
+    STATE.map = m;
+
+    // 3. GUARANTEED CONNECTIVITY (Tunneling)
+    // Find first floor tile
+    let start = null;
+    for(let y=1; y<STATE.size-1; y++) for(let x=1; x<STATE.size-1; x++) {
+        if(!m[y][x]) { start = {x,y}; break; }
+    }
+    if(!start) return genLevel(); // Retry if solid rock
+
+    // Flood fill to find all reachable
+    let reachable = new Set();
+    let q = [start];
+    reachable.add(`${start.x},${start.y}`);
+    
+    while(q.length) {
+        let c = q.pop();
+        [[0,1],[0,-1],[1,0],[-1,0]].forEach(([dx,dy]) => {
+            let nx = c.x+dx, ny = c.y+dy;
+            if(!m[ny][nx] && !reachable.has(`${nx},${ny}`)) {
+                reachable.add(`${nx},${ny}`);
+                q.push({x:nx, y:ny});
+            }
+        });
+    }
+
+    // Check for islands and tunnel to them
+    for(let y=1; y<STATE.size-1; y++) for(let x=1; x<STATE.size-1; x++) {
+        if(!m[y][x] && !reachable.has(`${x},${y}`)) {
+            // Found an island! Dig a tunnel to nearest reachable point
+            // (Simplified: Just blast a line to start)
+            let cur = {x,y};
+            while(m[cur.y][cur.x] !== 0 || !reachable.has(`${cur.x},${cur.y}`)) {
+                m[cur.y][cur.x] = 0; // Dig
+                if(cur.x < start.x) cur.x++;
+                else if(cur.x > start.x) cur.x--;
+                if(cur.y < start.y) cur.y++;
+                else if(cur.y > start.y) cur.y--;
+            }
+        }
+    }
+
+    // 4. Place Entities
+    PL.x = start.x; PL.y = start.y; PL.rx = start.x; PL.ry = start.y;
+    
+    // Exit
+    let ex;
+    do { ex = {x: rInt(STATE.size), y: rInt(STATE.size)}; } while(m[ex.y][ex.x]);
+    STATE.exit = { ...ex, open: false };
+
+    // Mobs
+    STATE.mobs = [];
+    for(let i=0; i<5+STATE.stage; i++) {
+        let mx, my;
+        do { mx=rInt(STATE.size); my=rInt(STATE.size); } while(m[my][mx] || Math.hypot(mx-PL.x, my-PL.y)<5);
+        STATE.mobs.push({ x:mx, y:my, hp:20+STATE.stage*5, maxHp:20+STATE.stage*5 });
+    }
+
+    // Loot
+    STATE.loot = [];
+    for(let i=0; i<4; i++) {
+        let lx, ly;
+        do { lx=rInt(STATE.size); ly=rInt(STATE.size); } while(m[ly][lx]);
+        let isSpell = Math.random() > 0.5;
+        STATE.loot.push({ 
+            x:lx, y:ly, 
+            type: isSpell ? 'spell' : 'heal',
+            variant: Math.random()>0.5 ? 'fire' : 'ice',
+            icon: isSpell ? '📜' : '🍷'
+        });
+    }
+
+    notify(`Stage ${STATE.stage}`);
+}
+
+// --- UTILS ---
+function isWall(x, y) {
+    if(x<0 || y<0 || x>=STATE.size || y>=STATE.size) return true;
+    return STATE.map[y][x];
+}
+function addPart(x, y, c, vx, vy, r) {
+    STATE.particles.push({ x, y, c, vx: (Math.random()-0.5)*2 + vx, vy: (Math.random()-0.5)*2 + vy, life: 1, r });
+}
+function addPopup(x, y, t, c) { STATE.popups.push({x,y,t,c,life:1}); }
+function killMob(m) {
+    STATE.mobs = STATE.mobs.filter(e => e !== m);
+    PL.xp += 10;
+    if(STATE.mobs.length === 0) { STATE.exit.open = true; notify("Exit Open!"); }
+}
+function nextStage() { STATE.stage++; genLevel(); }
+function notify(msg) {
+    let el = document.getElementById('notif');
+    el.innerText = msg; el.style.opacity = 1;
+    setTimeout(() => el.style.opacity = 0, 2000);
+}
+function rInt(n) { return Math.floor(Math.random()*n); }
+
+// Controls Logic
+document.querySelectorAll('.btn').forEach(b => {
+    b.onpointerdown = e => { STATE.keys[b.dataset.k] = true; b.style.background="rgba(255,255,255,0.5)"; e.preventDefault(); };
+    b.onpointerup = e => { STATE.keys[b.dataset.k] = false; b.style.background=""; e.preventDefault(); };
+    b.onpointerleave = e => { STATE.keys[b.dataset.k] = false; b.style.background=""; };
+});
+document.getElementById('dashBtn').onpointerdown = e => { STATE.keys[' '] = true; e.preventDefault(); };
+document.getElementById('dashBtn').onpointerup = e => { STATE.keys[' '] = false; e.preventDefault(); };
+
+init();
 </script>
 </body>
 </html>
