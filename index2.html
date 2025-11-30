@@ -1,14 +1,4 @@
-This is a solid foundation for a browser-based roguelike\! You have a working game loop, inventory system, procedural generation, and combat logic.
 
-To take this from a "prototype" to a "game," I have implemented three major improvements in the code below:
-
-1.  **Smooth Rendering & Camera System:** Currently, entities "snap" from tile to tile. I added **Linear Interpolation (Lerp)** so characters slide smoothly. I also increased the Map Size to **25x25** and added a **Camera** that follows the player, making the dungeon feel much larger.
-2.  **Atmospheric Lighting (Fog of War):** I added a lighting system. Areas far from the player are shrouded in darkness, and you must explore to reveal the map.
-3.  **Dash Mechanic:** I added a "Dash" ability (Spacebar or dedicated button). This adds a skill element to combat, allowing you to dodge projectiles or close gaps quickly.
-
-Here is the fully updated, single-file code. Save this as an `.html` file.
-
-```html
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -829,4 +819,3 @@ Here is the fully updated, single-file code. Save this as an `.html` file.
 </script>
 </body>
 </html>
-```
