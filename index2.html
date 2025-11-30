@@ -1,10 +1,9 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>Mage Quest: Deep Dungeon</title>
+    <title>Mage Quest: Deep Dungeon (Fixed)</title>
     <style>
         body {
             margin: 0;
@@ -33,11 +32,12 @@
             left: 0;
             width: 100%;
             padding: 10px;
-            pointer-events: none; /* Let clicks pass through to canvas */
+            pointer-events: none;
             box-sizing: border-box;
             display: flex;
             justify-content: space-between;
             text-shadow: 2px 2px 0 #000;
+            z-index: 10;
         }
         .stat-box {
             background: rgba(0,0,0,0.6);
@@ -50,7 +50,6 @@
             box-shadow: 0 0 20px rgba(0,0,0,0.5);
         }
         
-        /* Controls Overlay */
         #controlsLayer {
             position: absolute;
             bottom: 20px;
@@ -61,6 +60,7 @@
             justify-content: space-between;
             padding: 0 20px;
             box-sizing: border-box;
+            z-index: 10;
         }
         .control-group {
             pointer-events: auto;
@@ -82,16 +82,15 @@
             align-items: center;
             font-size: 24px;
             user-select: none;
+            cursor: pointer;
         }
         .dpad-btn:active, .dpad-btn.pressed { background: rgba(255, 255, 255, 0.5); transform: scale(0.95); }
         
-        /* Layout for D-pads */
         .up { top: 0; left: 50px; }
         .down { bottom: 0; left: 50px; }
         .left { top: 50px; left: 0; }
         .right { top: 50px; right: 0; }
         
-        /* Center Action Button (Dash/Inventory) */
         #actionContainer {
             pointer-events: auto;
             display: flex;
@@ -114,29 +113,6 @@
         
         #dashBtn { background: #e24a4a; box-shadow: 0 4px 0 #992c2c; }
 
-        /* Inventory Modal */
-        #inventoryModal {
-            display: none;
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 80%;
-            max-width: 400px;
-            background: rgba(20, 20, 20, 0.95);
-            border: 2px solid #666;
-            border-radius: 10px;
-            padding: 20px;
-            color: white;
-            z-index: 100;
-        }
-        #inventoryList li {
-            padding: 10px;
-            border-bottom: 1px solid #333;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
         #notification {
             position: absolute;
             top: 60px;
@@ -149,6 +125,8 @@
             opacity: 0;
             transition: opacity 0.3s;
             pointer-events: none;
+            z-index: 20;
+            white-space: nowrap;
         }
     </style>
 </head>
@@ -180,7 +158,6 @@
         
         <div id="actionContainer">
             <button id="dashBtn" class="action-btn">DASH (Space)</button>
-            <button id="invBtn" class="action-btn">BAG (I)</button>
         </div>
 
         <div class="control-group" id="fireGroup">
@@ -190,21 +167,14 @@
             <div class="dpad-btn right" data-key="ArrowRight">🔥</div>
         </div>
     </div>
-
-    <div id="inventoryModal">
-        <h3>🎒 Inventory</h3>
-        <ul id="inventoryList" style="list-style: none; padding: 0; max-height: 200px; overflow-y: auto;"></ul>
-        <button class="action-btn" onclick="document.getElementById('inventoryModal').style.display='none'" style="width:100%">Close</button>
-    </div>
 </div>
 
 <script>
     // --- ENGINE CONFIGURATION ---
     const CONFIG = {
         TILE_SIZE: 48,
-        MAP_SIZE: 25, // Bigger map
-        VIEW_DIST: 6, // Radius for rendering
-        ANIMATION_SPEED: 0.2, // Movement lerp speed (lower is smoother/slower)
+        MAP_SIZE: 25, 
+        ANIMATION_SPEED: 0.2, 
         DASH_COOLDOWN: 2,
         TICK_RATE: 60
     };
@@ -223,18 +193,18 @@
         projectiles: [],
         loot: [],
         enemies: [],
-        lastTime: 0
+        lastTime: 0,
+        globalTime: 0
     };
 
     let player = {
-        gridX: 1, gridY: 1, // Logical position
-        renderX: 1, renderY: 1, // Visual position
+        gridX: 1, gridY: 1, 
+        renderX: 1, renderY: 1, 
         health: 100, maxHealth: 100,
         xp: 0, level: 1,
         dashTimer: 0,
         isMoving: false,
-        attackCooldown: 0,
-        inventory: []
+        attackCooldown: 0
     };
 
     let inputState = {
@@ -257,8 +227,24 @@
     }
 
     function startLevel() {
-        gameState.map = generateMap();
-        // Spawn enemies based on open tiles
+        // Fix 1: Ensure Map is Connected
+        gameState.map = generateConnectedMap();
+        
+        // Setup Player
+        let startPos = getRandomFloor();
+        player.gridX = startPos.x;
+        player.gridY = startPos.y;
+        player.renderX = startPos.x;
+        player.renderY = startPos.y;
+        
+        // Setup Exit
+        gameState.exit = getRandomFloor();
+        while(dist(gameState.exit.x, gameState.exit.y, player.gridX, player.gridY) < 10) {
+            gameState.exit = getRandomFloor();
+        }
+        gameState.exit.unlocked = false;
+
+        // Spawn Enemies
         gameState.enemies = [];
         for(let i=0; i<5 + gameState.stage; i++) {
             let pos = getRandomFloor();
@@ -266,411 +252,66 @@
                 gameState.enemies.push(createEnemy(pos.x, pos.y));
             }
         }
+
+        // Fix 2: Spawn Loot
+        gameState.loot = [];
+        for(let i=0; i<3; i++) {
+            let pos = getRandomFloor();
+            // Randomly choose potion or scroll
+            let type = Math.random() > 0.5 ? 'potion' : 'scroll';
+            gameState.loot.push({ 
+                x: pos.x, y: pos.y, 
+                type: type, 
+                symbol: type === 'potion' ? '🧪' : '📜',
+                floatOffset: Math.random() * Math.PI * 2 
+            });
+        }
         
-        let startPos = getRandomFloor();
-        player.gridX = startPos.x;
-        player.gridY = startPos.y;
-        player.renderX = startPos.x;
-        player.renderY = startPos.y;
-        
-        // Lock camera immediately
+        // Center Camera
         gameState.camera.x = player.renderX * CONFIG.TILE_SIZE - canvas.width/2;
         gameState.camera.y = player.renderY * CONFIG.TILE_SIZE - canvas.height/2;
-
-        gameState.exit = getRandomFloor();
-        while(dist(gameState.exit.x, gameState.exit.y, player.gridX, player.gridY) < 10) {
-            gameState.exit = getRandomFloor();
-        }
-        gameState.exit.unlocked = false;
         
         showNotification(`Level ${gameState.stage} - Find the Exit!`);
     }
 
-    // --- CORE LOOP ---
-    function gameLoop(timestamp) {
-        const dt = (timestamp - gameState.lastTime) / 1000;
-        gameState.lastTime = timestamp;
+    // --- MAP GENERATION (FIXED) ---
+    function generateConnectedMap() {
+        let map;
+        let isValid = false;
+        let attempts = 0;
 
-        update(dt);
-        draw();
+        while (!isValid && attempts < 100) {
+            map = createCellularAutomataMap();
+            if (checkConnectivity(map)) {
+                isValid = true;
+            }
+            attempts++;
+        }
         
-        requestAnimationFrame(gameLoop);
-    }
-
-    function update(dt) {
-        // 1. Player Input & Movement Logic
-        if (!player.isMoving) {
-            let dx = 0, dy = 0;
-            if (inputState.up) dy = -1;
-            else if (inputState.down) dy = 1;
-            else if (inputState.left) dx = -1;
-            else if (inputState.right) dx = 1;
-
-            if (dx !== 0 || dy !== 0) {
-                attemptMove(dx, dy);
+        if (!isValid) {
+            // Fallback: Fill everything with floor if generation fails
+            map = map.map(row => row.map(() => 0)); 
+            // Add border
+            for(let y=0; y<CONFIG.MAP_SIZE; y++) {
+                map[y][0] = 1; map[y][CONFIG.MAP_SIZE-1] = 1;
+            }
+            for(let x=0; x<CONFIG.MAP_SIZE; x++) {
+                map[0][x] = 1; map[CONFIG.MAP_SIZE-1][x] = 1;
             }
         }
-
-        // 2. Smooth Camera & Player Lerp
-        // Lerp formula: current + (target - current) * speed
-        player.renderX += (player.gridX - player.renderX) * CONFIG.ANIMATION_SPEED * (dt * 60);
-        player.renderY += (player.gridY - player.renderY) * CONFIG.ANIMATION_SPEED * (dt * 60);
-
-        // Snap if close enough to prevent micro-jitter
-        if(Math.abs(player.gridX - player.renderX) < 0.01) player.renderX = player.gridX;
-        if(Math.abs(player.gridY - player.renderY) < 0.01) player.renderY = player.gridY;
-        
-        player.isMoving = (Math.abs(player.gridX - player.renderX) > 0.1 || Math.abs(player.gridY - player.renderY) > 0.1);
-
-        // Camera Follow
-        const targetCamX = player.renderX * CONFIG.TILE_SIZE - canvas.width / 2 + CONFIG.TILE_SIZE/2;
-        const targetCamY = player.renderY * CONFIG.TILE_SIZE - canvas.height / 2 + CONFIG.TILE_SIZE/2;
-        gameState.camera.x += (targetCamX - gameState.camera.x) * 0.1;
-        gameState.camera.y += (targetCamY - gameState.camera.y) * 0.1;
-
-        // 3. Cooldowns
-        player.dashTimer -= dt;
-        player.attackCooldown -= dt;
-
-        // 4. Dash Logic
-        if (inputState.dash && player.dashTimer <= 0) {
-            performDash();
-        }
-
-        // 5. Shooting
-        if (player.attackCooldown <= 0) {
-            if (inputState.fireUp) fireProjectile(0, -1);
-            else if (inputState.fireDown) fireProjectile(0, 1);
-            else if (inputState.fireLeft) fireProjectile(-1, 0);
-            else if (inputState.fireRight) fireProjectile(1, 0);
-        }
-
-        // 6. Projectiles
-        for (let i = gameState.projectiles.length - 1; i >= 0; i--) {
-            let p = gameState.projectiles[i];
-            p.x += p.dx * p.speed * dt;
-            p.y += p.dy * p.speed * dt;
-            
-            // Wall Collision
-            if (isSolid(Math.floor(p.x), Math.floor(p.y))) {
-                addParticle(p.x, p.y, 'orange', 5);
-                gameState.projectiles.splice(i, 1);
-                continue;
-            }
-
-            // Enemy Collision
-            let hit = false;
-            for (let e of gameState.enemies) {
-                if (dist(p.x, p.y, e.x, e.y) < 0.6) {
-                    e.health -= 15; // Damage
-                    addPopup(e.x, e.y, "-15");
-                    addParticle(e.x, e.y, 'red', 8);
-                    if (e.health <= 0) killEnemy(e);
-                    hit = true;
-                    break;
-                }
-            }
-            if(hit) gameState.projectiles.splice(i, 1);
-            
-            if(dist(p.x, p.y, player.renderX, player.renderY) > 15) gameState.projectiles.splice(i, 1); // Cleanup
-        }
-
-        // 7. Enemy Logic (Simple Chasing)
-        gameState.enemies.forEach(e => {
-            // Visual Lerp for enemy
-            e.renderX += (e.x - e.renderX) * 0.1;
-            e.renderY += (e.y - e.renderY) * 0.1;
-            
-            e.moveTimer -= dt;
-            if (e.moveTimer <= 0 && dist(e.x, e.y, player.gridX, player.gridY) < 8) {
-                // Simple pathfinding
-                let dx = 0, dy = 0;
-                if (Math.abs(player.gridX - e.x) > Math.abs(player.gridY - e.y)) {
-                    dx = player.gridX > e.x ? 1 : -1;
-                } else {
-                    dy = player.gridY > e.y ? 1 : -1;
-                }
-                
-                // Attack Player
-                if (e.x + dx === player.gridX && e.y + dy === player.gridY) {
-                    player.health -= 5;
-                    addPopup(player.renderX, player.renderY, "-5", "red");
-                    updateUI();
-                    if(player.health <= 0) resetGame();
-                    e.moveTimer = 1.0;
-                } 
-                // Move
-                else if (!isSolid(e.x + dx, e.y + dy)) {
-                    // Check for other enemies
-                    if(!gameState.enemies.some(other => other !== e && other.x === e.x + dx && other.y === e.y + dy)) {
-                        e.x += dx;
-                        e.y += dy;
-                        e.moveTimer = 1.5; // Slow movement
-                    }
-                }
-            }
-        });
-
-        // 8. Particles
-        gameState.particles.forEach((p, i) => {
-            p.life -= dt;
-            p.x += p.vx * dt;
-            p.y += p.vy * dt;
-            if(p.life <= 0) gameState.particles.splice(i, 1);
-        });
-        
-        gameState.popups.forEach((p, i) => {
-            p.life -= dt;
-            p.y -= dt * 1; // Float up
-            if(p.life <= 0) gameState.popups.splice(i, 1);
-        });
-
-        updateUI();
+        return map;
     }
 
-    // --- GAMEPLAY FUNCTIONS ---
-
-    function attemptMove(dx, dy) {
-        const nx = player.gridX + dx;
-        const ny = player.gridY + dy;
-
-        if (!isSolid(nx, ny)) {
-            player.gridX = nx;
-            player.gridY = ny;
-            
-            // Check Exit
-            if (nx === gameState.exit.x && ny === gameState.exit.y && gameState.exit.unlocked) {
-                gameState.stage++;
-                startLevel();
-            }
-        }
-    }
-
-    function performDash() {
-        let dx = 0, dy = 0;
-        if (inputState.up) dy = -2;
-        else if (inputState.down) dy = 2;
-        else if (inputState.left) dx = -2;
-        else if (inputState.right) dx = 2;
-        else {
-             // Dash forward based on last movement or default
-             dx = 2; 
-        }
-
-        // Clamp dash to not go through walls
-        let targetX = player.gridX + dx;
-        let targetY = player.gridY + dy;
-        
-        // Simple raycast check for dash
-        if (!isSolid(targetX, targetY)) {
-            addParticle(player.renderX, player.renderY, 'white', 10);
-            player.gridX = targetX;
-            player.gridY = targetY;
-            player.dashTimer = CONFIG.DASH_COOLDOWN;
-            addPopup(player.renderX, player.renderY, "DASH!", "cyan");
-        }
-    }
-
-    function fireProjectile(dx, dy) {
-        gameState.projectiles.push({
-            x: player.renderX + 0.5,
-            y: player.renderY + 0.5,
-            dx: dx,
-            dy: dy,
-            speed: 8,
-            life: 2
-        });
-        player.attackCooldown = 0.3;
-    }
-
-    function killEnemy(enemy) {
-        gameState.enemies = gameState.enemies.filter(e => e !== enemy);
-        player.xp += 20;
-        addPopup(enemy.x, enemy.y, "+20 XP", "gold");
-        if(gameState.enemies.length === 0) {
-            gameState.exit.unlocked = true;
-            showNotification("Exit Unlocked!");
-        }
-    }
-
-    function createEnemy(x, y) {
-        return {
-            x: x, y: y,
-            renderX: x, renderY: y,
-            health: 30,
-            moveTimer: 0,
-            type: 'slime'
-        };
-    }
-
-    function isSolid(x, y) {
-        if (x < 0 || y < 0 || x >= CONFIG.MAP_SIZE || y >= CONFIG.MAP_SIZE) return true;
-        return gameState.map[y][x] === 1;
-    }
-
-    function getRandomFloor() {
-        let x, y;
-        do {
-            x = Math.floor(Math.random() * CONFIG.MAP_SIZE);
-            y = Math.floor(Math.random() * CONFIG.MAP_SIZE);
-        } while (gameState.map[y][x] === 1);
-        return {x, y};
-    }
-
-    function resetGame() {
-        alert("You Died! Restarting...");
-        player.health = 100;
-        player.xp = 0;
-        gameState.stage = 1;
-        startLevel();
-    }
-
-    // --- DRAWING ---
-    function draw() {
-        // Clear background
-        ctx.fillStyle = '#111';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-        ctx.save();
-        // Camera Transform
-        ctx.translate(-gameState.camera.x, -gameState.camera.y);
-
-        // 1. Draw Map (Only visible tiles)
-        const startCol = Math.floor(gameState.camera.x / CONFIG.TILE_SIZE);
-        const endCol = startCol + (canvas.width / CONFIG.TILE_SIZE) + 1;
-        const startRow = Math.floor(gameState.camera.y / CONFIG.TILE_SIZE);
-        const endRow = startRow + (canvas.height / CONFIG.TILE_SIZE) + 1;
-
-        for (let y = startRow; y <= endRow; y++) {
-            for (let x = startCol; x <= endCol; x++) {
-                if (x >= 0 && x < CONFIG.MAP_SIZE && y >= 0 && y < CONFIG.MAP_SIZE) {
-                    if (gameState.map[y][x] === 1) {
-                        // Wall (Pseudo 3D look)
-                        ctx.fillStyle = '#444';
-                        ctx.fillRect(x * CONFIG.TILE_SIZE, y * CONFIG.TILE_SIZE, CONFIG.TILE_SIZE, CONFIG.TILE_SIZE);
-                        ctx.fillStyle = '#222'; // Shadow
-                        ctx.fillRect(x * CONFIG.TILE_SIZE, y * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE - 5, CONFIG.TILE_SIZE, 5);
-                    } else {
-                        // Floor
-                        ctx.fillStyle = '#2a2a2a';
-                        ctx.fillRect(x * CONFIG.TILE_SIZE, y * CONFIG.TILE_SIZE, CONFIG.TILE_SIZE, CONFIG.TILE_SIZE);
-                        // Grid lines
-                        ctx.strokeStyle = '#333';
-                        ctx.lineWidth = 1;
-                        ctx.strokeRect(x * CONFIG.TILE_SIZE, y * CONFIG.TILE_SIZE, CONFIG.TILE_SIZE, CONFIG.TILE_SIZE);
-                    }
-                }
-            }
-        }
-
-        // Exit
-        ctx.font = `${CONFIG.TILE_SIZE}px Arial`;
-        ctx.textAlign = 'center';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(gameState.exit.unlocked ? "🚪" : "🔒", 
-            gameState.exit.x * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2, 
-            gameState.exit.y * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2);
-
-        // 2. Draw Enemies
-        gameState.enemies.forEach(e => {
-            const screenX = e.renderX * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2;
-            const screenY = e.renderY * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2;
-            
-            // Shadow
-            ctx.fillStyle = 'rgba(0,0,0,0.5)';
-            ctx.beginPath();
-            ctx.ellipse(screenX, screenY + 20, 15, 5, 0, 0, Math.PI*2);
-            ctx.fill();
-
-            // Sprite (Emoji for now)
-            ctx.font = '30px Arial';
-            ctx.fillText("👾", screenX, screenY);
-            
-            // HP Bar
-            const hpPct = e.health / 30;
-            ctx.fillStyle = 'red';
-            ctx.fillRect(screenX - 15, screenY - 30, 30, 4);
-            ctx.fillStyle = 'lime';
-            ctx.fillRect(screenX - 15, screenY - 30, 30 * hpPct, 4);
-        });
-
-        // 3. Draw Player
-        const pScreenX = player.renderX * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2;
-        const pScreenY = player.renderY * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2;
-        
-        // Shadow
-        ctx.fillStyle = 'rgba(0,0,0,0.5)';
-        ctx.beginPath();
-        ctx.ellipse(pScreenX, pScreenY + 20, 15, 5, 0, 0, Math.PI*2);
-        ctx.fill();
-
-        // Sprite
-        ctx.font = '35px Arial';
-        ctx.fillText("🧙‍♂️", pScreenX, pScreenY);
-        if(player.dashTimer > 0) ctx.fillText("💨", pScreenX - 20, pScreenY);
-
-        // 4. Projectiles
-        gameState.projectiles.forEach(p => {
-            ctx.fillStyle = '#aaf';
-            ctx.shadowBlur = 10;
-            ctx.shadowColor = '#aaf';
-            ctx.beginPath();
-            ctx.arc(p.x * CONFIG.TILE_SIZE, p.y * CONFIG.TILE_SIZE, 6, 0, Math.PI*2);
-            ctx.fill();
-            ctx.shadowBlur = 0;
-        });
-
-        // 5. Particles
-        gameState.particles.forEach(p => {
-            ctx.fillStyle = p.color;
-            ctx.globalAlpha = p.life;
-            ctx.beginPath();
-            ctx.arc(p.x * CONFIG.TILE_SIZE, p.y * CONFIG.TILE_SIZE, p.size, 0, Math.PI*2);
-            ctx.fill();
-            ctx.globalAlpha = 1;
-        });
-        
-        // 6. Popups (Damage numbers)
-        gameState.popups.forEach(p => {
-            ctx.fillStyle = p.color || 'white';
-            ctx.font = 'bold 20px Arial';
-            ctx.strokeStyle = 'black';
-            ctx.lineWidth = 2;
-            ctx.strokeText(p.text, p.x * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2, p.y * CONFIG.TILE_SIZE);
-            ctx.fillText(p.text, p.x * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2, p.y * CONFIG.TILE_SIZE);
-        });
-
-        ctx.restore();
-
-        // 7. Lighting / Fog of War Overlay
-        // Create a radial gradient centered on the player (screen relative)
-        const centerX = (player.renderX * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2) - gameState.camera.x;
-        const centerY = (player.renderY * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2) - gameState.camera.y;
-        
-        const gradient = ctx.createRadialGradient(centerX, centerY, 50, centerX, centerY, 400);
-        gradient.addColorStop(0, 'rgba(0,0,0,0)');
-        gradient.addColorStop(0.8, 'rgba(0,0,0,0.6)');
-        gradient.addColorStop(1, 'rgba(0,0,0,0.95)');
-        
-        ctx.fillStyle = gradient;
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-    }
-
-    // --- UTILS ---
-    function generateMap() {
-        // Cellular Automata for cave generation
+    function createCellularAutomataMap() {
         let map = [];
         for (let y = 0; y < CONFIG.MAP_SIZE; y++) {
             let row = [];
             for (let x = 0; x < CONFIG.MAP_SIZE; x++) {
-                // Border walls or random noise
                 if(x===0 || y===0 || x===CONFIG.MAP_SIZE-1 || y===CONFIG.MAP_SIZE-1) row.push(1);
                 else row.push(Math.random() < 0.45 ? 1 : 0);
             }
             map.push(row);
         }
-
-        // Smoothing steps
         for(let i=0; i<4; i++) {
             let nextMap = JSON.parse(JSON.stringify(map));
             for(let y=1; y<CONFIG.MAP_SIZE-1; y++) {
@@ -690,6 +331,410 @@
         return map;
     }
 
+    // Flood Fill to check if the map is playable
+    function checkConnectivity(map) {
+        let startX = -1, startY = -1;
+        let totalFloors = 0;
+
+        // Find a starting floor tile and count floors
+        for(let y=0; y<CONFIG.MAP_SIZE; y++) {
+            for(let x=0; x<CONFIG.MAP_SIZE; x++) {
+                if(map[y][x] === 0) {
+                    if(startX === -1) { startX = x; startY = y; }
+                    totalFloors++;
+                }
+            }
+        }
+
+        if(startX === -1) return false; // No floors?
+
+        // BFS Flood Fill
+        let visited = new Set();
+        let queue = [{x: startX, y: startY}];
+        visited.add(`${startX},${startY}`);
+        let reachedFloors = 0;
+
+        while(queue.length > 0) {
+            let curr = queue.shift();
+            reachedFloors++;
+
+            const dirs = [{x:0, y:1}, {x:0, y:-1}, {x:1, y:0}, {x:-1, y:0}];
+            for(let d of dirs) {
+                let nx = curr.x + d.x;
+                let ny = curr.y + d.y;
+                if(nx >= 0 && nx < CONFIG.MAP_SIZE && ny >= 0 && ny < CONFIG.MAP_SIZE) {
+                    if(map[ny][nx] === 0 && !visited.has(`${nx},${ny}`)) {
+                        visited.add(`${nx},${ny}`);
+                        queue.push({x: nx, y: ny});
+                    }
+                }
+            }
+        }
+
+        // If we reached at least 90% of the floors, it's a good map
+        return reachedFloors / totalFloors > 0.9; 
+    }
+
+    // --- GAME LOOP ---
+    function gameLoop(timestamp) {
+        const dt = (timestamp - gameState.lastTime) / 1000;
+        gameState.lastTime = timestamp;
+        gameState.globalTime += dt;
+
+        update(dt);
+        draw();
+        
+        requestAnimationFrame(gameLoop);
+    }
+
+    function update(dt) {
+        // Player Movement
+        if (!player.isMoving) {
+            let dx = 0, dy = 0;
+            if (inputState.up) dy = -1;
+            else if (inputState.down) dy = 1;
+            else if (inputState.left) dx = -1;
+            else if (inputState.right) dx = 1;
+
+            if (dx !== 0 || dy !== 0) attemptMove(dx, dy);
+        }
+
+        // Smooth Lerp
+        player.renderX += (player.gridX - player.renderX) * CONFIG.ANIMATION_SPEED * (dt * 60);
+        player.renderY += (player.gridY - player.renderY) * CONFIG.ANIMATION_SPEED * (dt * 60);
+        if(Math.abs(player.gridX - player.renderX) < 0.01) player.renderX = player.gridX;
+        if(Math.abs(player.gridY - player.renderY) < 0.01) player.renderY = player.gridY;
+        player.isMoving = (Math.abs(player.gridX - player.renderX) > 0.1 || Math.abs(player.gridY - player.renderY) > 0.1);
+
+        // Camera Follow
+        const targetCamX = player.renderX * CONFIG.TILE_SIZE - canvas.width / 2 + CONFIG.TILE_SIZE/2;
+        const targetCamY = player.renderY * CONFIG.TILE_SIZE - canvas.height/2 + CONFIG.TILE_SIZE/2;
+        gameState.camera.x += (targetCamX - gameState.camera.x) * 0.1;
+        gameState.camera.y += (targetCamY - gameState.camera.y) * 0.1;
+
+        // Cooldowns
+        player.dashTimer -= dt;
+        player.attackCooldown -= dt;
+
+        // Dash Input
+        if (inputState.dash && player.dashTimer <= 0) performDash();
+
+        // Shooting
+        if (player.attackCooldown <= 0) {
+            if (inputState.fireUp) fireProjectile(0, -1);
+            else if (inputState.fireDown) fireProjectile(0, 1);
+            else if (inputState.fireLeft) fireProjectile(-1, 0);
+            else if (inputState.fireRight) fireProjectile(1, 0);
+        }
+
+        // Projectiles
+        for (let i = gameState.projectiles.length - 1; i >= 0; i--) {
+            let p = gameState.projectiles[i];
+            p.x += p.dx * p.speed * dt;
+            p.y += p.dy * p.speed * dt;
+            
+            if (isSolid(Math.floor(p.x), Math.floor(p.y))) {
+                addParticle(p.x, p.y, 'orange', 5);
+                gameState.projectiles.splice(i, 1);
+                continue;
+            }
+
+            let hit = false;
+            for (let e of gameState.enemies) {
+                if (dist(p.x, p.y, e.x, e.y) < 0.6) {
+                    e.health -= 15;
+                    addPopup(e.x, e.y, "-15");
+                    addParticle(e.x, e.y, 'red', 8);
+                    if (e.health <= 0) killEnemy(e);
+                    hit = true;
+                    break;
+                }
+            }
+            if(hit) gameState.projectiles.splice(i, 1);
+            if(dist(p.x, p.y, player.renderX, player.renderY) > 15) gameState.projectiles.splice(i, 1);
+        }
+
+        // Enemy Logic
+        gameState.enemies.forEach(e => {
+            e.renderX += (e.x - e.renderX) * 0.1;
+            e.renderY += (e.y - e.renderY) * 0.1;
+            
+            e.moveTimer -= dt;
+            if (e.moveTimer <= 0 && dist(e.x, e.y, player.gridX, player.gridY) < 8) {
+                let dx = 0, dy = 0;
+                if (Math.abs(player.gridX - e.x) > Math.abs(player.gridY - e.y)) {
+                    dx = player.gridX > e.x ? 1 : -1;
+                } else {
+                    dy = player.gridY > e.y ? 1 : -1;
+                }
+                
+                if (e.x + dx === player.gridX && e.y + dy === player.gridY) {
+                    player.health -= 5;
+                    addPopup(player.renderX, player.renderY, "-5", "red");
+                    updateUI();
+                    if(player.health <= 0) resetGame();
+                    e.moveTimer = 1.0;
+                } else if (!isSolid(e.x + dx, e.y + dy) && !gameState.enemies.some(other => other !== e && other.x === e.x + dx && other.y === e.y + dy)) {
+                    e.x += dx;
+                    e.y += dy;
+                    e.moveTimer = 1.5;
+                }
+            }
+        });
+
+        // Loot Collision (Fix 2)
+        for(let i = gameState.loot.length - 1; i >= 0; i--) {
+            let item = gameState.loot[i];
+            if(dist(player.gridX, player.gridY, item.x, item.y) < 0.8) {
+                if(item.type === 'potion') {
+                    player.health = Math.min(100, player.health + 30);
+                    addPopup(player.renderX, player.renderY, "Healed!", "lime");
+                    showNotification("Picked up Health Potion");
+                } else if (item.type === 'scroll') {
+                    player.xp += 50;
+                    addPopup(player.renderX, player.renderY, "+50 XP", "gold");
+                    showNotification("Picked up Ancient Scroll");
+                }
+                addParticle(item.x, item.y, 'yellow', 10);
+                gameState.loot.splice(i, 1);
+                updateUI();
+            }
+        }
+
+        // Particles
+        gameState.particles.forEach((p, i) => {
+            p.life -= dt;
+            p.x += p.vx * dt;
+            p.y += p.vy * dt;
+            if(p.life <= 0) gameState.particles.splice(i, 1);
+        });
+        
+        gameState.popups.forEach((p, i) => {
+            p.life -= dt;
+            p.y -= dt * 1;
+            if(p.life <= 0) gameState.popups.splice(i, 1);
+        });
+
+        updateUI();
+    }
+
+    function attemptMove(dx, dy) {
+        const nx = player.gridX + dx;
+        const ny = player.gridY + dy;
+
+        if (!isSolid(nx, ny)) {
+            player.gridX = nx;
+            player.gridY = ny;
+            if (nx === gameState.exit.x && ny === gameState.exit.y && gameState.exit.unlocked) {
+                gameState.stage++;
+                startLevel();
+            }
+        }
+    }
+
+    function performDash() {
+        let dx = 0, dy = 0;
+        if (inputState.up) dy = -2;
+        else if (inputState.down) dy = 2;
+        else if (inputState.left) dx = -2;
+        else if (inputState.right) dx = 2;
+        else dx = 2; 
+
+        let targetX = player.gridX + dx;
+        let targetY = player.gridY + dy;
+        
+        if (!isSolid(targetX, targetY)) {
+            // Fix 3: Dash visual is now particle based, not a persistent text
+            addParticle(player.renderX, player.renderY, 'cyan', 8);
+            addParticle(player.renderX + dx/2, player.renderY + dy/2, 'white', 8);
+            
+            player.gridX = targetX;
+            player.gridY = targetY;
+            player.renderX = targetX; // Snap for visual crispness on dash
+            player.renderY = targetY;
+            player.dashTimer = CONFIG.DASH_COOLDOWN;
+            addPopup(player.renderX, player.renderY, "DASH!", "cyan");
+        }
+    }
+
+    function fireProjectile(dx, dy) {
+        gameState.projectiles.push({
+            x: player.renderX + 0.5,
+            y: player.renderY + 0.5,
+            dx: dx, dy: dy, speed: 8, life: 2
+        });
+        player.attackCooldown = 0.3;
+    }
+
+    function killEnemy(enemy) {
+        gameState.enemies = gameState.enemies.filter(e => e !== enemy);
+        player.xp += 20;
+        addPopup(enemy.x, enemy.y, "+20 XP", "gold");
+        if(gameState.enemies.length === 0) {
+            gameState.exit.unlocked = true;
+            showNotification("Exit Unlocked!");
+        }
+    }
+
+    function createEnemy(x, y) {
+        return {
+            x: x, y: y, renderX: x, renderY: y,
+            health: 30, moveTimer: 0, type: 'slime'
+        };
+    }
+
+    function isSolid(x, y) {
+        if (x < 0 || y < 0 || x >= CONFIG.MAP_SIZE || y >= CONFIG.MAP_SIZE) return true;
+        return gameState.map[y][x] === 1;
+    }
+
+    function getRandomFloor() {
+        let x, y;
+        let attempts = 0;
+        do {
+            x = Math.floor(Math.random() * CONFIG.MAP_SIZE);
+            y = Math.floor(Math.random() * CONFIG.MAP_SIZE);
+            attempts++;
+        } while (gameState.map[y][x] === 1 && attempts < 100);
+        return {x, y};
+    }
+
+    function resetGame() {
+        alert("You Died! Restarting...");
+        player.health = 100;
+        player.xp = 0;
+        gameState.stage = 1;
+        startLevel();
+    }
+
+    // --- DRAWING ---
+    function draw() {
+        ctx.fillStyle = '#111';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        ctx.translate(-gameState.camera.x, -gameState.camera.y);
+
+        const startCol = Math.floor(gameState.camera.x / CONFIG.TILE_SIZE);
+        const endCol = startCol + (canvas.width / CONFIG.TILE_SIZE) + 1;
+        const startRow = Math.floor(gameState.camera.y / CONFIG.TILE_SIZE);
+        const endRow = startRow + (canvas.height / CONFIG.TILE_SIZE) + 1;
+
+        for (let y = startRow; y <= endRow; y++) {
+            for (let x = startCol; x <= endCol; x++) {
+                if (x >= 0 && x < CONFIG.MAP_SIZE && y >= 0 && y < CONFIG.MAP_SIZE) {
+                    if (gameState.map[y][x] === 1) {
+                        ctx.fillStyle = '#444';
+                        ctx.fillRect(x * CONFIG.TILE_SIZE, y * CONFIG.TILE_SIZE, CONFIG.TILE_SIZE, CONFIG.TILE_SIZE);
+                        ctx.fillStyle = '#222'; 
+                        ctx.fillRect(x * CONFIG.TILE_SIZE, y * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE - 5, CONFIG.TILE_SIZE, 5);
+                    } else {
+                        ctx.fillStyle = '#2a2a2a';
+                        ctx.fillRect(x * CONFIG.TILE_SIZE, y * CONFIG.TILE_SIZE, CONFIG.TILE_SIZE, CONFIG.TILE_SIZE);
+                        ctx.strokeStyle = '#333';
+                        ctx.lineWidth = 1;
+                        ctx.strokeRect(x * CONFIG.TILE_SIZE, y * CONFIG.TILE_SIZE, CONFIG.TILE_SIZE, CONFIG.TILE_SIZE);
+                    }
+                }
+            }
+        }
+
+        // Exit
+        ctx.font = `${CONFIG.TILE_SIZE}px Arial`;
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(gameState.exit.unlocked ? "🚪" : "🔒", 
+            gameState.exit.x * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2, 
+            gameState.exit.y * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2);
+
+        // Loot Drawing (Fix 2)
+        gameState.loot.forEach(l => {
+            const floatY = Math.sin(gameState.globalTime * 3 + l.floatOffset) * 5;
+            ctx.font = '24px Arial';
+            ctx.fillText(l.symbol, 
+                l.x * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2, 
+                l.y * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2 + floatY
+            );
+        });
+
+        // Enemies
+        gameState.enemies.forEach(e => {
+            const screenX = e.renderX * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2;
+            const screenY = e.renderY * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2;
+            
+            ctx.fillStyle = 'rgba(0,0,0,0.5)';
+            ctx.beginPath();
+            ctx.ellipse(screenX, screenY + 20, 15, 5, 0, 0, Math.PI*2);
+            ctx.fill();
+
+            ctx.font = '30px Arial';
+            ctx.fillText("👾", screenX, screenY);
+            
+            const hpPct = e.health / 30;
+            ctx.fillStyle = 'red';
+            ctx.fillRect(screenX - 15, screenY - 30, 30, 4);
+            ctx.fillStyle = 'lime';
+            ctx.fillRect(screenX - 15, screenY - 30, 30 * hpPct, 4);
+        });
+
+        // Player (Fix 3: Removed cloud text logic)
+        const pScreenX = player.renderX * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2;
+        const pScreenY = player.renderY * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2;
+        
+        ctx.fillStyle = 'rgba(0,0,0,0.5)';
+        ctx.beginPath();
+        ctx.ellipse(pScreenX, pScreenY + 20, 15, 5, 0, 0, Math.PI*2);
+        ctx.fill();
+
+        ctx.font = '35px Arial';
+        ctx.fillText("🧙‍♂️", pScreenX, pScreenY);
+
+        // Projectiles
+        gameState.projectiles.forEach(p => {
+            ctx.fillStyle = '#aaf';
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#aaf';
+            ctx.beginPath();
+            ctx.arc(p.x * CONFIG.TILE_SIZE, p.y * CONFIG.TILE_SIZE, 6, 0, Math.PI*2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        });
+
+        // Particles
+        gameState.particles.forEach(p => {
+            ctx.fillStyle = p.color;
+            ctx.globalAlpha = p.life;
+            ctx.beginPath();
+            ctx.arc(p.x * CONFIG.TILE_SIZE, p.y * CONFIG.TILE_SIZE, p.size, 0, Math.PI*2);
+            ctx.fill();
+            ctx.globalAlpha = 1;
+        });
+        
+        // Popups
+        gameState.popups.forEach(p => {
+            ctx.fillStyle = p.color || 'white';
+            ctx.font = 'bold 20px Arial';
+            ctx.strokeStyle = 'black';
+            ctx.lineWidth = 2;
+            ctx.strokeText(p.text, p.x * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2, p.y * CONFIG.TILE_SIZE);
+            ctx.fillText(p.text, p.x * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2, p.y * CONFIG.TILE_SIZE);
+        });
+
+        ctx.restore();
+
+        // Lighting
+        const centerX = (player.renderX * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2) - gameState.camera.x;
+        const centerY = (player.renderY * CONFIG.TILE_SIZE + CONFIG.TILE_SIZE/2) - gameState.camera.y;
+        
+        const gradient = ctx.createRadialGradient(centerX, centerY, 50, centerX, centerY, 400);
+        gradient.addColorStop(0, 'rgba(0,0,0,0)');
+        gradient.addColorStop(0.8, 'rgba(0,0,0,0.6)');
+        gradient.addColorStop(1, 'rgba(0,0,0,0.95)');
+        
+        ctx.fillStyle = gradient;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    // --- UTILS ---
     function addParticle(x, y, color, count) {
         for(let i=0; i<count; i++) {
             gameState.particles.push({
@@ -734,8 +779,7 @@
         return Math.sqrt((x2-x1)**2 + (y2-y1)**2);
     }
 
-    // --- INPUT HANDLERS ---
-    // Keyboard
+    // --- INPUT ---
     window.addEventListener('keydown', e => {
         if(e.key === 'w') inputState.up = true;
         if(e.key === 's') inputState.down = true;
@@ -746,10 +790,6 @@
         if(e.key === 'ArrowLeft') inputState.fireLeft = true;
         if(e.key === 'ArrowRight') inputState.fireRight = true;
         if(e.key === ' ') inputState.dash = true;
-        if(e.key === 'i') {
-            const inv = document.getElementById('inventoryModal');
-            inv.style.display = inv.style.display === 'none' ? 'block' : 'none';
-        }
     });
 
     window.addEventListener('keyup', e => {
@@ -764,11 +804,9 @@
         if(e.key === ' ') inputState.dash = false;
     });
 
-    // Touch / Mouse UI
     const buttons = document.querySelectorAll('.dpad-btn');
     buttons.forEach(btn => {
         const key = btn.getAttribute('data-key');
-        
         const setKey = (active) => {
             if(key === 'w') inputState.up = active;
             if(key === 's') inputState.down = active;
@@ -780,40 +818,15 @@
             if(key === 'ArrowRight') inputState.fireRight = active;
         };
 
-        btn.addEventListener('pointerdown', (e) => {
-            e.preventDefault();
-            btn.classList.add('pressed');
-            setKey(true);
-        });
-        btn.addEventListener('pointerup', (e) => {
-            e.preventDefault();
-            btn.classList.remove('pressed');
-            setKey(false);
-        });
-        btn.addEventListener('pointerleave', (e) => {
-            btn.classList.remove('pressed');
-            setKey(false);
-        });
+        btn.addEventListener('pointerdown', (e) => { e.preventDefault(); btn.classList.add('pressed'); setKey(true); });
+        btn.addEventListener('pointerup', (e) => { e.preventDefault(); btn.classList.remove('pressed'); setKey(false); });
+        btn.addEventListener('pointerleave', (e) => { btn.classList.remove('pressed'); setKey(false); });
     });
 
-    // Dash button specific
     const dashBtn = document.getElementById('dashBtn');
-    dashBtn.addEventListener('pointerdown', (e) => {
-        e.preventDefault();
-        inputState.dash = true;
-    });
-    dashBtn.addEventListener('pointerup', (e) => {
-        e.preventDefault();
-        inputState.dash = false;
-    });
+    dashBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); inputState.dash = true; });
+    dashBtn.addEventListener('pointerup', (e) => { e.preventDefault(); inputState.dash = false; });
     
-    // Inventory Button
-    document.getElementById('invBtn').addEventListener('click', () => {
-        const inv = document.getElementById('inventoryModal');
-        inv.style.display = inv.style.display === 'none' ? 'block' : 'none';
-    });
-
-    // Start
     init();
 
 </script>
